@@ -30,7 +30,7 @@ The main script `run.py` provides both flow reconstruction (`observer` role) and
 ### Examples
 #### Online flow analysis (sniffing)
 ```
-python src/run.py --role observer --sniff --output-path flows/sniffed/ --stats-log-step 500 --output-batch-size 50
+python src/run.py --role observer --sniff --output-path flows/sniffed/ --stats-log-step 500 --output-batch-size 2000
 python src/run.py --role detector --sniff --output-path log/ --stats-log-step 500
 ```
 ##### Online with custom network interface
@@ -58,7 +58,7 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 
 ## Detection Event Logs
 
-Detection events will be logge if NetWatcher is run in the role of detector (`--role detector`). Event log files will be create and rotate in the directory specified by `--output-path` parametrs. Log file is automatically rotated upon reaching 5 MB size (up to 10 rotated log file are preserved). 
+Detection events will be logge if NetWatcher is run in the role of detector (`--role detector`). Event log files will be create and rotate in the directory specified by `--output-path` parametrs. Log file `detector_events.log` is automatically rotated upon reaching 5 MB size (up to 10 rotated log files are preserved). 
 Event log have the following format:
 
 ```
