@@ -10,7 +10,7 @@ NetWatcher is a network monitoring tool that reconstructs network flows from pac
 ## Installation
 1. Clone the repository:
 ```
-git clone https://github.com/yourusername/NetWatcher.git
+git clone https://github.com/NocturnalShadow/net-watcher.git
 cd NetWatcher
 ```
 2. Install the required dependencies:
