@@ -1,6 +1,6 @@
 # NetWatcher
 
-NetWatcher is a network monitoring tool that reconstructs network flows from packet captures or sniffing network interfaces. It extracts features from these flows and uses a pre-trained classification model to determine if the traffic is malicious or benign. Alerts for malicious traffic are logged for further inspection.
+NetWatcher is a network monitoring tool that reconstructs network flows from packet captures or sniffing network interfaces. It extracts features from these flows and uses a pre-trained classification model to determine if the traffic is malicious. Alerts for malicious traffic are logged for further inspection.
 
 ## Features
 - Offline Analysis: Process PCAP files to reconstruct network flows and detect threats.
