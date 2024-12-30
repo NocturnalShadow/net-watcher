@@ -1,0 +1,11 @@
+.venv
+__pycache__/
+flows/
+samples/
+log/
+*.pcap
+*.pcapng
+*.csv
+*.parquet
+*.h5
+draft.ipynb
