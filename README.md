@@ -96,7 +96,7 @@ The model was trained using the [ISCX-Botnet-2014](https://www.unb.ca/cic/datase
 | `src_port`              | Source port number                                                           |
 | `dst_port`              | Destination port number                                                      |
 | `protocol`              | Transport layer protocol used (e.g., TCP, UDP)                               |
-| `termination_reason`    | Reason for flow termination (e.g., FIN, RST)                                 |
+| `termination_reason`    | Reason for flow termination (FIN, RST, idle_timeout, activity_timeout)       |
 
 ### Features
 | Attribute Name          | Description                                                                  | Directional |
