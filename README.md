@@ -50,11 +50,12 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 - `--net-interface`: Specify the network interface to capture packets from (used with `--sniff`). If not specified, the default interface is used.
 - `--input-path`: Path to a file or directory containing PCAP files for analysis (not used with `--sniff`).
 - `--output-path`: Path to a directory where network flows (observer role) or detection events (detector role) will be stored.
+- `--output-filter`: The type of the events to output: ok, alerts or all (default "alerts") (--role detector only).
+- `--output-batch-size`: Batch size for dumping flows to disk during reconstruction (observer role only) (default: 5000).
 - `--flow-activity-timeout`: Flow activity timeout in seconds (default: 1000).
 - `--flow-idle-timeout`: Flow idle timeout in seconds (default: 600).
-- `--output-batch-size`: Batch size for dumping flows to disk during reconstruction (observer role only) (default: 5000).
 - `--stats-log-step`: Log traffic processing statistics every N packets (default: 100000).
-- `--log-all-events`: If set, logs all events to the output file, not just alerts.
+- `--log-path`: Path to the application log file. If not specified, logs will be sent to stdout.
 
 ## Detection Event Logs
 

@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--net-interface', type=str, help='Network interface to capture packets from (can only be used with --sniff). If not specified, the default one will be used.')
     parser.add_argument('--input-path', type=str, help='Path to a file or directory containing PCAP files for analysis (can not be used with --sniff)')
     parser.add_argument('--output-path', type=str, help='Path to a directory where network flows (--role observer) or detection events (--role detector) will be stored')
-    parser.add_argument('--output-filter', type=str, default='alerts', help='The type of events to output: ok, alerts or all (default "alerts") (--role detector only)')
+    parser.add_argument('--output-filter', type=str, default='alerts', help='The type of the events to output: ok, alerts or all (default "alerts") (--role detector only)')
     parser.add_argument('--output-batch-size', type=int, default=5000, help='Batch size for dumping the flows to disk during reconstruction (--role observer only)')
     parser.add_argument('--flow-activity-timeout', type=int, default=1000, help='Flow activity timeout in seconds')
     parser.add_argument('--flow-idle-timeout', type=int, default=600, help='Flow idle timeout in seconds')
