@@ -1,29 +1,19 @@
 import argparse
 import queue
 import threading
-import time
-
-import numpy as np
-import pandas as pd
-
-import pyarrow as pa
-import pyarrow.parquet as pq
-
-from datetime import datetime
-import scapy
-
 import logging
 import os, glob
 
-from flow_analysis import analyze_flows
+import scapy
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from flow_reconstruction import FlowReconstructor
+from flow_analysis import analyze_flows
 from flow_features import ensure_type_consistency
 from logging_utils import *
 from enums import *
-
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(message)s')
-
-log = logging.getLogger(__name__)
 
 # Offline flow analysis (from PCAP files)
 # python src/run.py --role observer --input-path pcap/train/malicious/ --output-path flows/train/ --output-batch-size 1000
@@ -36,6 +26,7 @@ log = logging.getLogger(__name__)
 # With custom network interface
 # python src/run.py --role observer --sniff --net-interface "Software Loopback Interface 1" --output-path log/ --stats-log-step 500
 # python src/run.py --role detector --sniff --net-interface "Software Loopback Interface 1" --output-path log/ --stats-log-step 500
+
 
 def log_operational_info(args):
     operational_role = 'Reconstructing flows' if args.role == 'observer' else 'Detecting threats'
@@ -57,14 +48,21 @@ def main():
     parser.add_argument('--net-interface', type=str, help='Network interface to capture packets from (can only be used with --sniff). If not specified, the default one will be used.')
     parser.add_argument('--input-path', type=str, help='Path to a file or directory containing PCAP files for analysis (can not be used with --sniff)')
     parser.add_argument('--output-path', type=str, help='Path to a directory where network flows (--role observer) or detection events (--role detector) will be stored')
+    parser.add_argument('--output-filter', type=str, default='alerts', help='The type of events to output: ok, alerts or all (default "alerts") (--role detector only)')
+    parser.add_argument('--output-batch-size', type=int, default=5000, help='Batch size for dumping the flows to disk during reconstruction (--role observer only)')
     parser.add_argument('--flow-activity-timeout', type=int, default=1000, help='Flow activity timeout in seconds')
     parser.add_argument('--flow-idle-timeout', type=int, default=600, help='Flow idle timeout in seconds')
-    parser.add_argument('--output-batch-size', type=int, default=5000, help='Batch size for dumping the flows to disk during reconstruction (--role observer only)')
     parser.add_argument('--stats-log-step', type=int, default=100_000, help='Log traffic processing statistics every N packets')
-    parser.add_argument('--log-all-events', action='store_true', help='Log all events to the output file, not just alerts')
+    parser.add_argument('--log-path', type=str, help='Path to the application log file. If not specified, logs will be sent to stdout.')
 
     args = parser.parse_args()
     kwargs = {k: v for k, v in vars(args).items() if v is not None} # remove None values
+
+    # Setup logging
+    configure_app_logger(args.log_path, level=logging.INFO, maxFileSizeMb=5)
+    if args.log_path:
+        print(f"Output path: {args.output_path}")
+        print(f"Application logs path: {args.log_path}")
 
     # Validate parameters
     if args.sniff and args.input_path:
@@ -75,6 +73,10 @@ def main():
     else:
         # use default network interface if not specified
         kwargs["net_interface"] = str(scapy.all.conf.iface)
+
+    # Validate output_filter
+    if args.role == 'detector' and args.output_filter not in ['ok', 'alerts', 'all']:
+        parser.error("--output-filter must be one of 'ok', 'alerts', or 'all'.")
 
     try:
         log_operational_info(args) # TODO: pass kwargs instead of args
@@ -110,12 +112,11 @@ def setup_sniff_output_path(**kwargs):
 def detection_online(**kwargs):
     net_interface = kwargs.get("net_interface")
     output_path = setup_sniff_output_path(**kwargs)
-    log_all_events = kwargs.get("log_all_events")
+    output_filter = kwargs.get("output_filter")
     event_log_file = os.path.join(output_path, "detector_events.log")
     log.info(f"Running threat detection for interface {net_interface}")
     log.info(f"Detection events will be logged to {event_log_file}")
-    if not log_all_events:
-        log.info("Only alerts will be logged.")
+    log.info(f"Events output filter: {output_filter}")
 
     event_log_rotator_thread = start_log_rotation(
         event_log_file, interval=60, max_log_files=10, max_file_size=5*1024*1024) # TODO: make configurable
@@ -123,7 +124,7 @@ def detection_online(**kwargs):
     network_flows = queue.Queue()
     flow_analyzer_thread = threading.Thread(
         target=analyze_flows,
-        args=(network_flows, event_log_file, log_all_events),
+        args=(network_flows, event_log_file, output_filter),
         daemon=True)
     flow_analyzer_thread.start()
     
@@ -138,6 +139,8 @@ def detection_online(**kwargs):
 def detection_offline(**kwargs):
     input_path = kwargs.get("input_path")
     output_path = kwargs.get("output_path")
+    output_filter = kwargs.get("output_filter")
+
     os.makedirs(output_path, exist_ok=True)
 
     def process_pcap_file(input_pcap_file):
@@ -148,7 +151,7 @@ def detection_offline(**kwargs):
         network_flows = queue.Queue()
         flow_analyzer_thread = threading.Thread(
             target=analyze_flows,
-            args=(network_flows, event_log_file),
+            args=(network_flows, event_log_file, output_filter),
             daemon=True)
         flow_analyzer_thread.start()
 
@@ -160,7 +163,7 @@ def detection_offline(**kwargs):
 
     src_pcap_files = locate_pcap_files(input_path)
     for src_pcap_file in src_pcap_files:
-        process_pcap_file(src_pcap_file, )
+        process_pcap_file(src_pcap_file)
 
 def flow_reconstruction_online(**kwargs):
     output_path = setup_sniff_output_path(**kwargs)

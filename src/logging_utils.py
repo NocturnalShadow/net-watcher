@@ -7,6 +7,27 @@ import threading
 
 from datetime import datetime
 
+import logging
+from logging.handlers import RotatingFileHandler
+
+# ------------------------------------- Application logging -------------------------------------
+
+log = logging.getLogger('app_logger')
+
+def configure_app_logger(log_path=None, level=logging.INFO, maxFileSizeMb=5):
+    if log_path:
+        handler = RotatingFileHandler(log_path, maxBytes=maxFileSizeMb*1024*1024, backupCount=5)
+        handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        handler.setLevel(level)
+    else:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        log.addHandler(handler)
+
+    log.addHandler(handler)
+    log.setLevel(level)
+# ------------------------------------- Events logging -------------------------------------
+
 # TODO: try to use LogRotatingFileHandler instead of custom implementation
 
 def try_log(file_path, message, max_retries=3):

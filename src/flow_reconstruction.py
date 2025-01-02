@@ -1,18 +1,13 @@
-import time
-from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, sniff, conf
-
 import threading
 import queue
-
-import logging
+import time
 import gc
+
+from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, sniff, conf
 
 from flow_features import calculate_features, first_packet_time, last_packet_time
 from enums import Direction, FlowTerminationReason, Protocol
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-
-log = logging.getLogger(__name__) 
+from logging_utils import log
 
 # TODO: consider different timeout values for different protocols (e.g. TCP vs UDP)
 # TODO: Analyze dataset to: 
@@ -23,7 +18,7 @@ class FlowReconstructor:
     def __init__(self, output_queue=queue.Queue(), **kwargs):
         self.idle_timeout = int(kwargs.get("idle_timeout", 600))
         self.activity_timeout = int(kwargs.get("activity_timeout", 1000))
-        self.net_interface = kwargs.get("net_interface", None)
+        self.net_interface = kwargs.get("net_interface", conf.iface)
         
         assert self.idle_timeout > 0, "Idle timeout must be greater than 0"
         assert self.activity_timeout > 0, "Activity timeout must be greater than 0"

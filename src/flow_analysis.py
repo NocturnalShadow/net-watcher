@@ -1,20 +1,13 @@
-from datetime import datetime
-import queue
-import threading
 import time
-import numpy as np
-
 import pickle
-import scapy
+import os
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
+
+from datetime import datetime
 from enums import Protocol
 
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-
-from sklearn.preprocessing import MinMaxScaler
-
-from flow_reconstruction import FlowReconstructor
 from flow_features import flow_to_np
 from logging_utils import try_log
 
@@ -39,7 +32,11 @@ def pretty_print_flow(flow, label=""):
     flow_signature = f"{flow['src_ip']}:{flow['src_port']} -> {flow['dst_ip']}:{flow['dst_port']} ({ protocol })"
     return f"{curent_time} {label} {flow_signature}"
 
-def analyze_flows(network_flows, event_log_file, log_all_events=False):
+def analyze_flows(network_flows, event_log_file, output_filter="all"):
+    # TODO: turn into enum
+    log_ok_events = output_filter == "all" or output_filter == "ok"
+    log_alert_events = output_filter == "all" or output_filter == "alerts" 
+
     # Load the pretrained model
     model = tf.keras.models.load_model(model_location)
 
@@ -58,9 +55,9 @@ def analyze_flows(network_flows, event_log_file, log_all_events=False):
         features, meta = flow_to_np(flow)
         # print(f"Analyzing flow {meta}")
         predicted_class, _ = classify_single_flow(features, model, scaler, threshold=0.5)
-        if predicted_class == 1:
+        if predicted_class == 1 and log_alert_events:
             try_log(event_log_file, pretty_print_flow(flow, label="[ALERT]"))
-        elif log_all_events:
+        elif log_ok_events:
             try_log(event_log_file, pretty_print_flow(flow, label="[OK]"))
 
         network_flows.task_done()

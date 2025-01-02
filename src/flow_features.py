@@ -1,15 +1,13 @@
 import pandas as pd
 import statistics
-import logging
 
 from scapy.all import TCP
 
 from enums import *
+from logging_utils import log
 
 import numpy as np
 import os
-
-log = logging.getLogger(__name__)
 
 # Define the type conversion functions
 def to_list_int64(column): 
