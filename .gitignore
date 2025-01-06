@@ -3,9 +3,12 @@ __pycache__/
 flows/
 samples/
 log/
+dist/
+build/
 *.pcap
 *.pcapng
 *.csv
 *.parquet
 *.h5
+*.spec
 draft.ipynb

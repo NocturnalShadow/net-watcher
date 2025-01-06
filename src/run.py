@@ -15,6 +15,9 @@ from flow_features import ensure_type_consistency
 from logging_utils import *
 from enums import *
 
+# needed for pyinstaller to work
+import sklearn 
+
 # Offline flow analysis (from PCAP files)
 # python src/run.py --role observer --input-path pcap/train/malicious/ --output-path flows/train/ --output-batch-size 1000
 # python src/run.py --role detector --input-path pcap/train/malicious/ --output-path log/
@@ -60,7 +63,11 @@ def main():
 
     # Setup logging
     configure_app_logger(args.log_path, level=logging.INFO, maxFileSizeMb=5)
+
     if args.log_path:
+        print("================================================================")
+        print("=========================> NetWatcher <=========================")
+        print("================================================================")
         print(f"Output path: {args.output_path}")
         print(f"Application logs path: {args.log_path}")
 

@@ -1,0 +1,18 @@
+FROM ubuntu:22.04
+
+WORKDIR /build
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update
+RUN apt-get install -y curl python3.10-dev python3.10 python3-pip
+RUN python3.10 -m pip install cffi pyinstaller
+
+COPY . .
+RUN python3.10 -m pip install --no-cache-dir -r requirements.txt
+RUN pyinstaller --name netwatcher --onefile /build/src/run.py --add-data artifacts/*:artifacts --clean
+
+ENTRYPOINT ["ls", "/build/", "-l"]
+
+# To copy the executable to the host, run the following commands:
+# docker build -f Dockerfile.build -t netwatcher:build .
+# docker create --name builder netwatcher:build && docker cp builder:/build/dist/netwatcher ./dist/netwatcher && docker rm builder

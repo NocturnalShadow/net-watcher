@@ -1,0 +1,25 @@
+FROM ubuntu:22.04
+
+WORKDIR /build
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update
+RUN apt-get install curl software-properties-common -y
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get install -y python3.11-dev python3.11 python3-pip
+RUN python3.11 -m pip install cffi pyinstaller
+
+# Download and extract UPX 
+RUN curl -L https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz -o upx.tar.xz \ 
+    && mkdir -p /usr/local/bin/upx \ 
+    && tar -xf upx.tar.xz -C /usr/local/bin/upx --strip-components=1
+
+COPY . .
+RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
+RUN pyinstaller --name netwatcher --onefile /build/src/run.py --add-data artifacts/*:artifacts --upx-dir /usr/local/bin/upx --clean
+
+ENTRYPOINT ["ls", "/build/", "-l"]
+
+# To copy the executable to the host, run the following commands:
+# docker build -f Dockerfile.build -t netwatcher:build .
+# docker create --name builder netwatcher:build && docker cp builder:/build/dist/netwatcher ./dist/netwatcher && docker rm builder

@@ -1,6 +1,7 @@
+import os
+import sys
 import time
 import pickle
-import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
@@ -11,8 +12,16 @@ from enums import Protocol
 from flow_features import flow_to_np
 from logging_utils import try_log
 
-model_location = "./artifacts/model.keras"
-scaler_path = './artifacts/scaler.pkl'
+def get_resource_path(relative_path):
+    """ Get the absolute path to a resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.normpath(os.path.join(base_path, relative_path))
+
+model_location = get_resource_path("./artifacts/model.keras")
+scaler_path = get_resource_path("./artifacts/scaler.pkl")
 
 # Function to classify a single flow
 def classify_single_flow(flow, model, scaler, threshold=0.98):
