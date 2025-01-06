@@ -142,6 +142,13 @@ class FlowReconstructor:
                 self.update_stats(packet)
 
     def packet_processor(self):
+        try:
+            self._packet_processor()
+        except Exception as e:
+            log.error(f"Packet processor failed: {e}", exc_info=True)
+            raise e
+
+    def _packet_processor(self):
         while True:
             packet = self.packet_queue.get()
             if packet is None:
@@ -306,6 +313,13 @@ class FlowReconstructor:
             log.error(f"ERROR: Flow {flow_id} not found among flows.")
     
     def finalizing_flows_terminator(self, stop_event, terminator_trigger_event):
+        try:
+            self._finalizing_flows_terminator(stop_event, terminator_trigger_event)
+        except Exception as e:
+            log.error(f"Finalizing flows terminator failed: {e}", exc_info=True)
+            raise e
+
+    def _finalizing_flows_terminator(self, stop_event, terminator_trigger_event):
         while not stop_event.is_set():
             terminator_trigger_event.wait(self.tcp_termination_check_interval)
             terminator_trigger_event.clear()
@@ -313,6 +327,13 @@ class FlowReconstructor:
         self.terminate_finalizing_flows()
 
     def terminated_flows_processor(self):
+        try:
+            self._terminated_flows_processor()
+        except Exception as e:
+            log.error(f"Terminated flows processor failed: {e}", exc_info=True)
+            raise e
+
+    def _terminated_flows_processor(self):
         while True:
             flow = self.terminated_flows.get()
             if flow is None:

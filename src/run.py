@@ -262,8 +262,15 @@ def batch_process(queue, action, batch_size):
             buffer.clear()
 
 def batch_process_async(_queue, action, batch_size):
+    def try_batch_process(_queue, action, batch_size):
+        try:
+            batch_process(_queue, action, batch_size)
+        except Exception as e:
+            log.error(f"Batch processing failed: {e}")
+            raise e
+
     t = threading.Thread(
-        target=batch_process,
+        target=try_batch_process,
         args=(_queue, action, batch_size),
         daemon=True)
     t.start()

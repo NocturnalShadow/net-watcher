@@ -9,6 +9,7 @@ from datetime import datetime
 
 import logging
 from logging.handlers import RotatingFileHandler
+from contextlib import contextmanager
 
 # ------------------------------------- Application logging -------------------------------------
 
@@ -26,6 +27,15 @@ def configure_app_logger(log_path=None, level=logging.INFO, maxFileSizeMb=5):
 
     log.addHandler(handler)
     log.setLevel(level)
+
+# @contextmanager 
+# def log_exception(): 
+#     try: 
+#         yield 
+#     except Exception as e: 
+#         log.exception("Exception occurred") 
+#         raise
+
 # ------------------------------------- Events logging -------------------------------------
 
 # TODO: try to use LogRotatingFileHandler instead of custom implementation

@@ -77,20 +77,20 @@ def get_numeric_feature():
 
 flow_numeric_features = get_numeric_feature()
 
-def flow_to_np(flow):
-    vector = np.array([flow[field] for field in flow_numeric_features], dtype=np.float32)
+def flow_to_np_and_meta(flow):
+    features = np.array([flow[field] for field in flow_numeric_features], dtype=np.float32)
     meta = {k: v for k, v in flow.items() if k not in flow_numeric_features and not k.endswith("_seq")}
-    return vector, meta
+    return features, meta
 
 def flows_df_to_np(df):
-    vectors = []
+    feature_vectors = []
     metas = []
     for _, row in df.iterrows():
-        vector = np.array([row[field] for field in flow_numeric_features], dtype=np.float32)
+        features = np.array([row[field] for field in flow_numeric_features], dtype=np.float32)
         meta = {k: v for k, v in row.items() if k not in flow_numeric_features and not k.endswith("_seq")}
-        vectors.append(vector)
+        feature_vectors.append(features)
         metas.append(meta)
-    return np.array(vectors), metas
+    return np.array(feature_vectors), metas
 
 # Function to apply the type conversions
 def ensure_type_consistency(df):
