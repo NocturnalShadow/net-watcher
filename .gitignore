@@ -3,6 +3,8 @@ __pycache__/
 flows/
 samples/
 log/
+logs/
+events/
 dist/
 build/
 *.pcap
