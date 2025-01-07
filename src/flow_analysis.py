@@ -46,8 +46,15 @@ def to_local_time(timestamp):
 
 def pretty_print_flow(flow, label=""):
     protocol = Protocol(flow['protocol']).name
-    curent_time = to_local_time(time.time()) #(flow['timestamp'])
-    flow_signature = f"{flow['src_ip']}:{flow['src_port']} -> {flow['dst_ip']}:{flow['dst_port']} ({ protocol })"
+    curent_time = to_local_time(time.time())
+    duration_s = flow['duration_s']
+    if duration_s < 1:
+        duration_str = f"{round(duration_s * 1000)} ms"
+    else:
+        seconds = int(duration_s)
+        milliseconds = round((duration_s - seconds) * 1000)
+        duration_str = f"{seconds}s {milliseconds}ms"
+    flow_signature = f"{flow['src_ip']}:{flow['src_port']} -> {flow['dst_ip']}:{flow['dst_port']} ({protocol}): {flow['packets_count']} packets, {flow['payload_bytes_total']} bytes, {duration_str}"
     return f"{curent_time} {label} {flow_signature}"
 
 def analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None):
@@ -69,8 +76,8 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
     with open(scaler_path, 'rb') as f:
         scaler = pickle.load(f)
 
+    flows_batch = []
     features_batch = []
-    metas_batch = []
     batch_size = 64
     wait_timeout = 2
     threshold = 0.98
@@ -80,11 +87,11 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
 
     def process_batch():
         predicted_classes, _ = classify_flows(np.array(features_batch), model, scaler, threshold)
-        for flow_class, flow_meta in zip(predicted_classes, metas_batch):
+        for flow_class, flow in zip(predicted_classes, flows_batch):
             if flow_class == 1 and log_alert_events:
-                try_log(event_log_file, pretty_print_flow(flow_meta, label="[ALERT]"))
+                try_log(event_log_file, pretty_print_flow(flow, label="[ALERT]"))
             elif log_ok_events:
-                try_log(event_log_file, pretty_print_flow(flow_meta, label="[OK]"))
+                try_log(event_log_file, pretty_print_flow(flow, label="[OK]"))
 
     while True:
         if network_flows.qsize() >= batch_size or (time.time() - start_wait_time >= wait_timeout):
@@ -98,9 +105,9 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
                 if flow["packets_count"] < 3:
                     skipped_flows_count += 1
                     continue
-                features, meta = flow_to_np_and_meta(flow)
+                features, _ = flow_to_np_and_meta(flow)
+                flows_batch.append(flow)
                 features_batch.append(features)
-                metas_batch.append(meta)
                 analyzed_flows_count += 1
 
             if features_batch:

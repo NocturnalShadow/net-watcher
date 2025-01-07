@@ -17,6 +17,8 @@ log = logging.getLogger('app_logger')
 
 def configure_app_logger(log_path=None, level=logging.INFO, maxFileSizeMb=5):
     if log_path:
+        if os.path.isdir(log_path):
+            log_path = os.path.join(log_path, 'netwatcher.log')
         handler = RotatingFileHandler(log_path, maxBytes=maxFileSizeMb*1024*1024, backupCount=5)
         handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         handler.setLevel(level)
