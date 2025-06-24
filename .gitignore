@@ -1,12 +1,14 @@
 .venv
 __pycache__/
 flows/
+flows*/
 samples/
 log/
 logs/
 events/
 dist/
 build/
+venv/
 *.pcap
 *.pcapng
 *.csv

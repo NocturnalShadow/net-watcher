@@ -113,23 +113,6 @@ def ensure_type_consistency(df):
                 
     return df
 
-if __name__ == "__main__":
-    # Load DataFrame from Parquet dataset
-    dataset_path = os.path.join("flows", "train", "Neris")
-    df = pd.read_parquet(dataset_path)
-    print(f"Loaded DataFrame with {len(df)} rows.")
-    # Ensure type consistency
-    df = ensure_type_consistency(df)
-
-    # Convert DataFrame to array
-    vectors, metas = flows_df_to_np(df)
-
-    print(f"Loaded {len(vectors)} flow vectors.")
-    print(f"First row: {df.iloc[0]}")
-    print(f"Vector shape: {vectors.shape}")
-    print(f"Meta data: {metas[0]}")
-    print(f"Vector: {vectors[0]}")
-
 def first_packet_time(flow):
     return float(flow["packets"][0].time)
 
@@ -276,4 +259,34 @@ def calculate_features(flow):
         flow["window_size_min"] = 0
         flow["window_size_avg"] = 0
         flow["window_size_std"] = 0
+
+        for prefix in ["fwd_", "bwd_"]:
+            flow[prefix + "window_size_seq"] = []
+            flow[prefix + "window_size_min"] = 0
+            flow[prefix + "window_size_max"] = 0
+            flow[prefix + "window_size_avg"] = 0
+            flow[prefix + "window_size_std"] = 0
+            flow[prefix + "window_scaling_factor"] = 0
+            flow[prefix + "initial_window_size"] = 0
+            flow[prefix + "zero_window_count"] = 0
+            flow[prefix + "zero_window_update_count"] = 0
+            # flow[prefix + "zero_window_probe_count"] = 0
+
     return flow
+
+if __name__ == "__main__":
+    # Load DataFrame from Parquet dataset
+    dataset_path = os.path.join("flows", "train", "Neris")
+    df = pd.read_parquet(dataset_path)
+    print(f"Loaded DataFrame with {len(df)} rows.")
+    # Ensure type consistency
+    df = ensure_type_consistency(df)
+
+    # Convert DataFrame to array
+    vectors, metas = flows_df_to_np(df)
+
+    print(f"Loaded {len(vectors)} flow vectors.")
+    print(f"First row: {df.iloc[0]}")
+    print(f"Vector shape: {vectors.shape}")
+    print(f"Meta data: {metas[0]}")
+    print(f"Vector: {vectors[0]}")

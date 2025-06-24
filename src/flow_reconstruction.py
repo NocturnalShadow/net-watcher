@@ -16,10 +16,12 @@ from logging_utils import log
 
 class FlowReconstructor:
     def __init__(self, output_queue=queue.Queue(), **kwargs):
-        self.idle_timeout = int(kwargs.get("idle_timeout", 600))
-        self.activity_timeout = int(kwargs.get("activity_timeout", 1000))
+        self.idle_timeout = int(kwargs.get("flow_idle_timeout", 600))
+        self.activity_timeout = int(kwargs.get("flow_activity_timeout", 1000))
+        self.max_packets = int(kwargs.get("flow_max_packets", 100))
         self.net_interface = kwargs.get("net_interface", conf.iface)
-        
+        self.filter = kwargs.get("filter", "tcp")
+
         assert self.idle_timeout > 0, "Idle timeout must be greater than 0"
         assert self.activity_timeout > 0, "Activity timeout must be greater than 0"
         assert self.idle_timeout < self.activity_timeout, "Idle timeout must be less than activity timeout"
@@ -29,15 +31,15 @@ class FlowReconstructor:
         self.timeout_termination_check_interval = 60.0   # interval at which the list of active flows is checked for termination by timeout
 
         log.info(f"""Flow Reconstructor configuration:
-                                idle_timeout={self.idle_timeout}, activity_timeout={self.activity_timeout},
+                                idle_timeout={self.idle_timeout}, activity_timeout={self.activity_timeout}, max_packets={self.max_packets},
                                 tcp_termination_grace_period={self.tcp_termination_grace_period}, tcp_termination_check_interval={self.tcp_termination_check_interval},
                                 timeout_termination_check_interval={self.timeout_termination_check_interval},
-                                net_interface={self.net_interface}""")
+                                net_interface={self.net_interface}, filter={self.filter}""")
 
         self.current_time        = 0
         self.active_flows        = {}
         self.finalizing_flows    = {} # NOTE: Should be thread-safe according to https://docs.python.org/3/glossary.html#term-GIL
-        self.terminated_flows    = queue.Queue(maxsize=2000)    # terminated flows whose features to be calculated 
+        self.terminated_flows    = queue.Queue(maxsize=10000)    # terminated flows whose features to be calculated 
         self.packet_queue        = queue.Queue(maxsize=30000)   # 1k -> ~1.85 MB memory footprint <- Maxsize * (MTU + size(Scapy Ether)). Where MTU ~= 1500 + 20 bytes, size(Scapy Ether) = 344
         self.reconstructed_flows = output_queue                 # when flow reconstruction is done, the flows are put here
 
@@ -122,18 +124,24 @@ class FlowReconstructor:
                 self.update_stats(packet)
 
         assert self.net_interface is not None, "Network interface must be specified for live traffic processing"
-        sniff(filter="tcp", prn=packet_handler, iface=self.net_interface, store=0)
+        sniff(filter=self.filter, prn=packet_handler, iface=self.net_interface, store=0)
 
     def offline(self, source):
         log.info(f"Reconstructing flows from file: {source} ...")
+
+        # TODO: acually parse the filter
+        tcp_enabled = "tcp" in self.filter
+        log.info(f"TCP enabled: {tcp_enabled}")
+        udp_enabled = "udp" in self.filter
+        log.info(f"UDP enabled: {udp_enabled}")
 
         # TODO: solve meta.sec issue with pcapng files
         for pkt_data, pkt_meta in RawPcapReader(source):
             packet = Ether(pkt_data)
             packet.time = pkt_meta.sec + pkt_meta.usec / 1_000_000
             
-            # TODO: allow different protocols
-            if TCP in packet:
+            # TODO: allow more protocols
+            if (tcp_enabled and TCP in packet) or (udp_enabled and UDP in packet):
                 self.packet_queue.put(packet)
             else:
                 continue
@@ -188,10 +196,12 @@ class FlowReconstructor:
             packet.dport = 0
 
         if Raw not in packet:
-            packet.payload_bytes = 0
+            packet.payload_bytes = packet.payload_bytes = 0
         else:
-            packet.payload_bytes = len(packet.load)
-            # packet[TCP].remove_payload()
+            if UDP in packet:
+                packet.payload_bytes = len(packet[UDP].payload)
+            else:
+                packet.payload_bytes = len(packet.load)
 
             # Find the last layer before Raw and remove it's payload
             current_layer = packet
@@ -206,7 +216,7 @@ class FlowReconstructor:
     def process_tcp(self, packet):
         packet_tcp = packet[TCP]
         flow_id = (packet.src_ip, packet.dst_ip, packet.sport, packet.dport, packet.protocol)
-        flow = self.find_flow(flow_id, packet)
+        flow, flow_id = self.find_flow(flow_id, packet)
         if flow is None:
             # No connection found, we need to start a new flow
             flow = self.initiate_new_flow(flow_id, packet)
@@ -227,9 +237,13 @@ class FlowReconstructor:
 
     def process_universal(self, packet):
         flow_id = (packet.src_ip, packet.dst_ip, packet.sport, packet.dport, packet.protocol)
-        flow = self.find_flow(flow_id, packet)
+        flow, flow_id = self.find_flow(flow_id, packet)
         if flow is None:
             # No connection found, we need to start a new flow
+            flow = self.initiate_new_flow(flow_id, packet)
+        elif len(flow["packets"]) >= self.max_packets:
+            # If the flow has more packets than max_packets, we terminate it to avoid memory issues
+            self.terminate_flow(self.active_flows, flow_id, "packets_count")
             flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
@@ -247,12 +261,12 @@ class FlowReconstructor:
                     packet.direction = Direction.BACKWARD
             else:
                 packet.direction = Direction.FORWARD
-            return flow
+            return flow, flow_id
     
-        flow = find_flow_by_id(self.active_flows, flow_id, packet)
+        flow, flow_id = find_flow_by_id(self.active_flows, flow_id, packet)
         if flow is None:
-            flow = find_flow_by_id(self.finalizing_flows, flow_id, packet)
-        return flow
+            flow, flow_id = find_flow_by_id(self.finalizing_flows, flow_id, packet)
+        return flow, flow_id
 
     def initiate_new_flow(self, flow_id, packet):
         log.debug(f"Initiating new flow {flow_id}")
@@ -307,10 +321,11 @@ class FlowReconstructor:
         if flow is not None:
             if reason is not None:
                 flow["termination_reason"] = reason
-            log.debug(f"Terminating flow {flow_id}")
+            log.debug(f"Flow {flow_id} terminated because of {flow['termination_reason']}")
             self.enqueue_nowait(self.terminated_flows, flow, "terminated flow")
         else:
-            log.error(f"ERROR: Flow {flow_id} not found among flows.")
+            log.error(f"Flow {flow_id} not found among flows.")
+            log.error(f"Active flows: {self.active_flows.keys()}")
     
     def finalizing_flows_terminator(self, stop_event, terminator_trigger_event):
         try:
