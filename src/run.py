@@ -3,6 +3,7 @@ import queue
 import threading
 import logging
 import os, glob
+import time
 
 import scapy
 import pandas as pd
@@ -89,6 +90,7 @@ def main():
 
     try:
         log_operational_info(args) # TODO: pass kwargs instead of args
+        start = time.perf_counter()
         if args.role == 'observer':
             if args.sniff:
                 flow_reconstruction_online(**kwargs)
@@ -101,6 +103,8 @@ def main():
                 detection_offline(**kwargs)
         else:
             raise ValueError(f"Invalid role: {args.role}")
+        end = time.perf_counter()
+        log.info(f"Execution completed in {end - start:.2f} seconds.")
     except Exception as e:
         logging.error(e, exc_info=True)
     except KeyboardInterrupt:

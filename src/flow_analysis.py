@@ -133,14 +133,14 @@ if __name__ == "__main__":
 
     output_filter = "all"
     event_log_file = "log/flow_analysis_debug.log"
-    input_pcap_file = "pcap/train/malicious/IRC.pcap"
+    input_pcap_file = "pcap/icsx_botnet_2014/train/malicious/IRC.pcap"
     network_flows = queue.Queue()
     stop_event = threading.Event()
     flow_analyzer_thread = threading.Thread(
         target=analyze_flows,
         args=(network_flows, event_log_file, output_filter),
         daemon=True)
-        
+    
     flow_analyzer_thread.start()
 
     with FlowReconstructor(output_queue=network_flows, net_interface=scapy.all.conf.iface, stats_log_step=10000) as reconstructor:

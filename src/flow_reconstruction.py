@@ -137,7 +137,11 @@ class FlowReconstructor:
 
         # TODO: solve meta.sec issue with pcapng files
         for pkt_data, pkt_meta in RawPcapReader(source):
-            packet = Ether(pkt_data)
+            if len(pkt_data) >= 14:
+                packet = Ether(pkt_data)
+            else:
+                continue
+            
             packet.time = pkt_meta.sec + pkt_meta.usec / 1_000_000
             
             # TODO: allow more protocols
@@ -196,12 +200,18 @@ class FlowReconstructor:
             packet.dport = 0
 
         if Raw not in packet:
-            packet.payload_bytes = packet.payload_bytes = 0
+            packet.payload_bytes = 0
         else:
             if UDP in packet:
                 packet.payload_bytes = len(packet[UDP].payload)
             else:
-                packet.payload_bytes = len(packet.load)
+                try:
+                    packet.payload_bytes = len(packet.load)
+                except AttributeError:
+                    if TCP in packet:
+                        packet.payload_bytes = len(packet[TCP].payload)
+                    else:
+                        packet.payload_bytes = 0
 
             # Find the last layer before Raw and remove it's payload
             current_layer = packet
