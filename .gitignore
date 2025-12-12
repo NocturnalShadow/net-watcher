@@ -16,3 +16,9 @@ venv/
 *.h5
 *.spec
 draft.ipynb
+*.tfstate
+*terraform*
+*.zip
+*.pem
+*.key
+pcap/

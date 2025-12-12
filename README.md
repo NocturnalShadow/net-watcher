@@ -49,6 +49,21 @@ python src/run.py --role detector --sniff --output-filter all --output-path even
 pyinstaller --name netwatcher --onefile src/run.py --add-data artifacts/*:artifacts --clean
 ```
 
+## Clean Ubuntu install
+```
+1  mkdir github
+2  cd github
+3  sudo apt update
+4  sudo apt install git -y
+5  sudo apt install python3.10-venv python3.10-dev -y
+6  git clone https://github.com/NocturnalShadow/net-watcher
+7  cd net-watcher
+8  python3.10 -m venv .venv
+9  source .venv/bin/activate
+10  pip install -r requirements.txt
+11  sudo $(which python) src/run.py --role detector --sniff --output-filter all --output-path events/ --log-path logs/
+```
+
 ## Project Structure
 - `src/`: Source code for flow reconstruction, feature extraction, and classification.
 - `playbooks/`: Jupyter notebooks for manipulating datasets, training and evaluating models.
