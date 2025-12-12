@@ -188,7 +188,7 @@ resource "aws_lambda_function" "start_instance" {
 # EventBridge rule to stop instance
 resource "aws_cloudwatch_event_rule" "stop_instance" {
   name                = "stop-instance"
-  schedule_expression = "cron(0 21 * * ? *)"
+  schedule_expression = "cron(0 19 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "stop_instance" {
@@ -208,7 +208,7 @@ resource "aws_lambda_permission" "allow_eventbridge_stop" {
 # EventBridge rule to start instance
 resource "aws_cloudwatch_event_rule" "start_instance" {
   name                = "start-instance"
-  schedule_expression = "cron(0 9 * * ? *)"
+  schedule_expression = "cron(0 7 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "start_instance" {
