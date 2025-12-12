@@ -9,7 +9,6 @@ import scapy
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import tensorflow as tf
 
 from flow_reconstruction import FlowReconstructor
 from flow_analysis import analyze_flows
@@ -32,12 +31,11 @@ import sklearn
 # python src/run.py --role observer --sniff --net-interface "Software Loopback Interface 1" --output-path log/ --stats-log-step 500
 # python src/run.py --role detector --sniff --net-interface "Software Loopback Interface 1" --output-path log/ --stats-log-step 500
 
-gpus = tf.config.list_physical_devices('GPU')
-if not gpus:
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    print("No GPU detected. Using CPU.")
-else:
-    print(f"GPU(s) detected: {len(gpus)}")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import tensorflow as tf
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+print("TensorFlow version:", tf.__version__)
 
 def log_operational_info(args):
     operational_role = 'Reconstructing flows' if args.role == 'observer' else 'Detecting threats'
