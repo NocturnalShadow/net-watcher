@@ -1,3 +1,5 @@
+# tar -a -c -f suspend_resume.zip suspend_resume.py
+
 import os
 import boto3
 

@@ -157,8 +157,9 @@ resource "aws_lambda_function" "stop_instance" {
   filename      = "suspend_resume.zip"
   function_name = "stop-ec2-instance"
   role          = aws_iam_role.lambda_role.arn
-  handler       = "index.handler"
+  handler       = "suspend_resume.handler"
   runtime       = "python3.11"
+  source_code_hash = filebase64sha256("suspend_resume.zip")
 
   environment {
     variables = {
@@ -172,8 +173,9 @@ resource "aws_lambda_function" "start_instance" {
   filename      = "suspend_resume.zip"
   function_name = "start-ec2-instance"
   role          = aws_iam_role.lambda_role.arn
-  handler       = "index.handler"
+  handler       = "suspend_resume.handler"
   runtime       = "python3.11"
+  source_code_hash = filebase64sha256("suspend_resume.zip")
 
   environment {
     variables = {

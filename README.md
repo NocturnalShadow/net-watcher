@@ -49,7 +49,7 @@ python src/run.py --role detector --sniff --output-filter all --output-path even
 pyinstaller --name netwatcher --onefile src/run.py --add-data artifacts/*:artifacts --clean
 ```
 
-## Clean Ubuntu install
+## Quick Ubuntu install
 ```
 1  mkdir github
 2  cd github
