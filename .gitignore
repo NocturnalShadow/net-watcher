@@ -22,3 +22,4 @@ draft.ipynb
 *.pem
 *.key
 pcap/
+memory_profile/

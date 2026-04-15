@@ -41,6 +41,34 @@ cd NetWatcher
 python src/run.py --role detector --sniff --output-filter all --output-path events/ --log-path logs/
 ```
 
+## Running tests
+
+Tests require `pytest` and `scapy` (already present if you installed `requirements.txt`). Install the test runner before running for the first time:
+
+```
+pip install pytest
+```
+
+Run all flow reconstruction tests:
+```
+python -m pytest tests/ -v
+```
+
+Run a specific test file:
+```
+python -m pytest tests/flow_reconstruction/test_tcp_fin.py -v
+```
+
+Run a single scenario:
+```
+python -m pytest tests/flow_reconstruction/test_tcp_fin.py::TestFINTermination -v
+```
+
+Run E2E detection metrics (prints recall and FPR; use `-s` to see the table):
+```
+python -m pytest tests/e2e/ -v -s
+```
+
 ## How to package source as an executable
 1. Download and install `pyinstaller`.
 2. Install project dependencies `pip install -r requirements.txt`

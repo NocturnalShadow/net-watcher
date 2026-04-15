@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import pickle
 
@@ -12,17 +11,6 @@ from enums import Protocol
 
 from flow_features import flow_to_np_and_meta
 from logging_utils import *
-
-def get_resource_path(relative_path):
-    """ Get the absolute path to a resource, works for dev and for PyInstaller """
-    if getattr(sys, 'frozen', False):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath(".")
-    return os.path.normpath(os.path.join(base_path, relative_path))
-
-model_location = get_resource_path("./artifacts/model.keras")
-scaler_path = get_resource_path("./artifacts/scaler.pkl")
 
 # Function to classify a single flow
 def classify_single_flow(flow, model, scaler, threshold=0.98):
@@ -57,20 +45,23 @@ def pretty_print_flow(flow, label=""):
     flow_signature = f"{flow['src_ip']}:{flow['src_port']} -> {flow['dst_ip']}:{flow['dst_port']} ({protocol}): {flow['packets_count']} packets, {flow['payload_bytes_total']} bytes, {duration_str}"
     return f"{curent_time} {label} {flow_signature}"
 
-def analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None):
+def analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None,
+                  model_path=None, scaler_path=None):
     try:
-        _analyze_flows(network_flows, event_log_file, output_filter, stop_event)
+        _analyze_flows(network_flows, event_log_file, output_filter, stop_event,
+                       model_path, scaler_path)
     except Exception as e:
         log.error(f"Flow analysis failed: {e}", exc_info=True)
         raise e
 
-def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None):
+def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None,
+                   model_path=None, scaler_path=None):
     # TODO: turn into enum
     log_ok_events = output_filter == "all" or output_filter == "ok"
     log_alert_events = output_filter == "all" or output_filter == "alerts" 
 
     # Load the pretrained model
-    model = tf.keras.models.load_model(model_location)
+    model = tf.keras.models.load_model(model_path)
 
     # Load the scaler
     with open(scaler_path, 'rb') as f:

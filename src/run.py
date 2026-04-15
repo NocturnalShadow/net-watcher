@@ -2,8 +2,13 @@ import argparse
 import queue
 import threading
 import logging
-import os, glob
+import os, glob, sys
 import time
+
+def get_resource_path(relative_path):
+    """Resolve a path relative to the bundle root (PyInstaller) or CWD (dev)."""
+    base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.abspath('.')
+    return os.path.normpath(os.path.join(base, relative_path))
 
 import scapy
 import pandas as pd
@@ -65,8 +70,12 @@ def main():
     parser.add_argument('--flow-max-packets', type=int, default=100, help='Maximum number of packets per non-TCP flow. If the limit is exceeded, flow is closed and a new one is be created.')
     parser.add_argument('--stats-log-step', type=int, default=100_000, help='Log traffic processing statistics every N packets')
     parser.add_argument('--log-path', type=str, help='Path to the application log file. If not specified, logs will be sent to stdout.')
+    parser.add_argument('--model-path', type=str, default='artifacts/icsx-ctu-extended/dnn_16_16_16.keras', help='Path to the Keras model file (default: artifacts/icsx-ctu-extended/dnn_16_16_16.keras)')
+    parser.add_argument('--scaler-path', type=str, default='artifacts/icsx-ctu-extended/scaler.pkl', help='Path to the scaler pickle file (default: artifacts/icsx-ctu-extended/scaler.pkl)')
 
     args = parser.parse_args()
+    args.model_path  = get_resource_path(args.model_path)
+    args.scaler_path = get_resource_path(args.scaler_path)
     kwargs = {k: v for k, v in vars(args).items() if v is not None} # remove None values
 
     # Setup logging
@@ -92,6 +101,13 @@ def main():
     # Validate output_filter
     if args.role == 'detector' and args.output_filter not in ['ok', 'alerts', 'all']:
         parser.error("--output-filter must be one of 'ok', 'alerts', or 'all'.")
+
+    # Validate model and scaler paths for detector role
+    if args.role == 'detector':
+        if not os.path.isfile(args.model_path):
+            parser.error(f"Model file not found: {args.model_path}")
+        if not os.path.isfile(args.scaler_path):
+            parser.error(f"Scaler file not found: {args.scaler_path}")
 
     try:
         log_operational_info(args) # TODO: pass kwargs instead of args
@@ -143,9 +159,10 @@ def detection_online(**kwargs):
     flow_analyzer_thread = threading.Thread(
         target=analyze_flows,
         args=(network_flows, event_log_file, output_filter),
+        kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path')},
         daemon=True)
     flow_analyzer_thread.start()
-    
+
     with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
         reconstructor.online()
 
@@ -170,6 +187,7 @@ def detection_offline(**kwargs):
         flow_analyzer_thread = threading.Thread(
             target=analyze_flows,
             args=(network_flows, event_log_file, output_filter),
+            kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path')},
             daemon=True)
         flow_analyzer_thread.start()
 

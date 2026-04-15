@@ -26,7 +26,7 @@ class FlowReconstructor:
         assert self.activity_timeout > 0, "Activity timeout must be greater than 0"
         assert self.idle_timeout < self.activity_timeout, "Idle timeout must be less than activity timeout"
 
-        self.tcp_termination_grace_period = 1.0          # period for which new packets are allowed to join the finalizing TCP flow
+        self.tcp_termination_grace_period = 3.0          # period for which new packets are allowed to join the finalizing TCP flow
         self.tcp_termination_check_interval = 5.0        # interval at which the list of finalizing TCP flows is checked for termination
         self.timeout_termination_check_interval = 60.0   # interval at which the list of active flows is checked for termination by timeout
 
@@ -93,6 +93,11 @@ class FlowReconstructor:
         # Terminate remaining active flows
         for flow_id in list(self.active_flows.keys()):
             self.terminate_flow(self.active_flows, flow_id, "unknown")
+
+        # Emit finalizing flows whose grace period hadn't expired before the PCAP ended.
+        # termination_reason (FIN/RST) is already set — do not override it.
+        for flow_id in list(self.finalizing_flows.keys()):
+            self.terminate_flow(self.finalizing_flows, flow_id)
 
         self.terminated_flows.put(None)
         self.terminated_flows_processor_thread.join()
@@ -199,21 +204,18 @@ class FlowReconstructor:
             packet.sport = 0
             packet.dport = 0
 
-        if Raw not in packet:
-            packet.payload_bytes = 0
+        # Compute payload bytes from transport layer payload. This works whether
+        # the payload is a Raw layer or an auto-dissected protocol layer (e.g.,
+        # Scapy parses DNS on port 53, removing the Raw layer).
+        if UDP in packet:
+            packet.payload_bytes = len(packet[UDP].payload)
+        elif TCP in packet:
+            packet.payload_bytes = len(packet[TCP].payload)
         else:
-            if UDP in packet:
-                packet.payload_bytes = len(packet[UDP].payload)
-            else:
-                try:
-                    packet.payload_bytes = len(packet.load)
-                except AttributeError:
-                    if TCP in packet:
-                        packet.payload_bytes = len(packet[TCP].payload)
-                    else:
-                        packet.payload_bytes = 0
+            packet.payload_bytes = 0
 
-            # Find the last layer before Raw and remove it's payload
+        # Remove Raw layer if present (saves memory; payload_bytes already captured)
+        if Raw in packet:
             current_layer = packet
             while current_layer.payload:
                 if current_layer.payload.name == "Raw":
@@ -290,7 +292,7 @@ class FlowReconstructor:
         return flow
 
     # Only applicable to TCP flows
-    # FLow is finalized when the first FIN or RST flag is encountered
+    # Flow is finalized when the first FIN or RST flag is encountered
     def finalize_flow(self, flow_id, reason):
         # Skip if the flow is not active (means already finalizing or terminated)
         flow = self.active_flows.pop(flow_id, None)
