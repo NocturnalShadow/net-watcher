@@ -78,11 +78,19 @@ def _malicious_subdirs():
     """Return sorted list of (name, path) for each subdirectory of _MALICIOUS_ROOT."""
     if not os.path.isdir(_MALICIOUS_ROOT):
         return []
-    return sorted(
-        (entry.name, entry.path)
-        for entry in os.scandir(_MALICIOUS_ROOT)
-        if entry.is_dir()
-    )
+    seen = set()
+    result = []
+    for entry in os.scandir(_MALICIOUS_ROOT):
+        if entry.is_dir() and entry.name not in seen:
+            seen.add(entry.name)
+            result.append((entry.name, entry.path))
+    return sorted(result)
+
+
+def _class_recall(metrics, name):
+    r = metrics['per_class'][name]
+    total = r['alerts'] + r['oks']
+    return r['alerts'] / total if total else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +150,16 @@ class TestMaliciousRecall:
         total = total_alerts + total_oks
         recall = total_alerts / total if total else 0.0
 
+        return {
+            'recall': recall,
+            'mal_alerts': total_alerts,
+            'mal_total': total,
+            'per_class': per_class,
+        }
+
+    def test_breakdown(self, metrics):
+        """Print per-class recall table (no assertion — informational only)."""
+        per_class = metrics['per_class']
         print(f"\n{'='*52}")
         print(f"  Malicious Recall — Per-Class Breakdown")
         print(f"{'='*52}")
@@ -150,18 +168,53 @@ class TestMaliciousRecall:
             cls_recall = r['alerts'] / cls_total if cls_total else 0.0
             print(f"  {name:<28} {cls_recall:.4f}  ({r['alerts']}/{cls_total})")
         print(f"  {'─'*48}")
-        print(f"  Overall Recall:  {recall:.4f}  ({total_alerts}/{total})")
+        print(f"  Overall Recall:  {metrics['recall']:.4f}  ({metrics['mal_alerts']}/{metrics['mal_total']})")
         print(f"{'='*52}")
 
-        return {
-            'recall': recall,
-            'mal_alerts': total_alerts,
-            'mal_total': total,
-            'per_class': per_class,
-        }
-
+    # Overall
     def test_recall(self, metrics):
         assert metrics['recall'] >= 0.624, (
-            f"Recall {metrics['recall']:.4f} is below threshold 0.624 "
+            f"Recall {metrics['recall']:.4f} < 0.624 "
             f"({metrics['mal_alerts']}/{metrics['mal_total']})"
         )
+
+    # Per-class
+    def test_recall_donbot(self, metrics):
+        r = _class_recall(metrics, 'DonBot')
+        assert r >= 0.994, f"DonBot recall {r:.4f} < 0.994"
+
+    def test_recall_emotet(self, metrics):
+        r = _class_recall(metrics, 'Emotet')
+        assert r >= 0.870, f"Emotet recall {r:.4f} < 0.870"
+
+    def test_recall_kazy(self, metrics):
+        r = _class_recall(metrics, 'Kazy')
+        assert r >= 0.265, f"Kazy recall {r:.4f} < 0.265"
+
+    def test_recall_murlo(self, metrics):
+        r = _class_recall(metrics, 'Murlo')
+        assert r >= 0.106, f"Murlo recall {r:.4f} < 0.106"
+
+    def test_recall_neris(self, metrics):
+        r = _class_recall(metrics, 'Neris')
+        assert r >= 0.304, f"Neris recall {r:.4f} < 0.304"
+
+    def test_recall_rbot(self, metrics):
+        r = _class_recall(metrics, 'RBot')
+        assert r >= 0.032, f"RBot recall {r:.4f} < 0.032"
+
+    def test_recall_trickbot(self, metrics):
+        r = _class_recall(metrics, 'TrickBot')
+        assert r >= 0.997, f"TrickBot recall {r:.4f} < 0.997"
+
+    def test_recall_virut(self, metrics):
+        r = _class_recall(metrics, 'Virut')
+        assert r >= 0.105, f"Virut recall {r:.4f} < 0.105"
+
+    def test_recall_wannacry(self, metrics):
+        r = _class_recall(metrics, 'WannaCry')
+        assert r >= 0.457, f"WannaCry recall {r:.4f} < 0.457"
+
+    def test_recall_zeus(self, metrics):
+        r = _class_recall(metrics, 'Zeus')
+        assert r >= 0.043, f"Zeus recall {r:.4f} < 0.043"
