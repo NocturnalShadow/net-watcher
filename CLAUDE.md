@@ -2,7 +2,26 @@
 
 ## Role & Objective
 
-You are a specialized memory optimization agent for the **net-watcher** network threat detection system. Your goal is to reduce peak RSS memory from ~4.5 GB to under 1 GB for the `net-watcher-test-only` dataset **without degrading detection accuracy or processing throughput**.
+You are a specialized memory optimization agent for the **net-watcher** network threat detection system. The original goal was to reduce peak RSS from ~5 GB to under 1 GB on the `net-watcher-test-only` dataset without degrading detection accuracy or processing throughput.
+
+## Current Status (as of commit `6cf5eb5` on `memory-optimization` branch)
+
+**Optimizations applied:**
+- **#1 PacketRecord slots dataclass** — `flow["packets"]` now holds lightweight records (~100 B/record vs ~2–5 KB/Scapy pkt); 5-tuple metadata stored once on the flow dict.
+- **#2 Bounded `network_flows` queue** — `--flow-queue-max-size` CLI arg (default 2000); offline modes use blocking `put()` (backpressure), online keeps `enqueue_nowait` (discard).
+
+**Results on full dataset:**
+- `main` baseline `7e875d9`: 5,020.8 MB peak / 1,804.4 MB avg / 4,307 s
+- After `6cf5eb5` (#1 + #2): **927.8 MB peak / 840.5 MB avg / 3,100 s** — sub-1 GB target met.
+- Runtime improved ~28 % (less GC churn on Scapy object graphs).
+
+**Still unbounded / not yet guaranteed safe for arbitrary input:**
+- `active_flows` and `finalizing_flows` dicts — count is constrained only by flow lifecycle (timeouts / FIN / RST), not by a hard cap. A pathological pcap could still grow these without bound. See Hotspot #2B below.
+- `packet_queue` and `terminated_flows` queues use `enqueue_nowait` in all modes — in offline this silently drops packets/flows under load rather than propagating backpressure upstream. See Hotspot #2C below.
+
+## Profiler output naming
+
+`profile_memory.py` suffixes output files with the short commit hash (e.g. `memory_samples_6cf5eb5.csv`, `memory_usage_6cf5eb5.png`) so successive runs don't overwrite baselines. This lives on `memory-optimization`; on `main` the files are unsuffixed.
 
 ## Source Files (Python only — read nothing else unless you created it)
 
@@ -41,88 +60,45 @@ RawPcapReader ──► packet_queue (30 k max)
 
 ## Diagnosed Memory Hotspots (ranked by impact)
 
-### #1 — Scapy packet objects in `active_flows` / `finalizing_flows` (CRITICAL ~3–4 GB)
+### #1 — Scapy packet objects in `active_flows` / `finalizing_flows` — **DONE (commit `6cf5eb5`)**
 
-**Location:** `flow_reconstruction.py` — `initiate_new_flow()` and `process_tcp/universal()`
+Each flow stored full Scapy packet objects in `flow["packets"]` (~2–5 KB per packet). With thousands of simultaneous TCP flows × tens of packets, this dominated peak RSS.
 
-Each flow stores **full Scapy packet objects** in `flow["packets"]`. A Scapy `Ether(pkt_data)` object occupies ~2–5 KB even after `preprocess()` strips the Raw payload. With a large pcap creating thousands of simultaneous TCP flows each holding tens of packets, this easily reaches gigabytes.
+**Implemented:** `PacketRecord` `__slots__` dataclass in `flow_reconstruction.py` carrying only the fields downstream needs (`time`, `payload_bytes`, `direction`, `tcp_flags`, `tcp_window`, `tcp_wscale`). `_to_record(packet, direction)` converts Scapy packets at append-time. 5-tuple metadata (`src_ip`, `dst_ip`, `sport`, `dport`, `protocol`) is stored once on the flow dict in `initiate_new_flow`. `flow_features.py` reads metadata from the flow dict and iterates `PacketRecord` fields; TCP flag counting uses `enums.TCPFlag` bitmasks instead of Scapy's `FlagValue`.
 
-**What `calculate_features()` actually needs per packet:**
-- `packet.time` → `float`
-- `packet.payload_bytes` → `int` (already set by `preprocess()`)
-- `packet.direction` → `Direction` enum
-- TCP only: `packet[TCP].flags` → flags byte
-- TCP only: `packet[TCP].window` → `int`
-- TCP SYN only: `packet[TCP].options` → list (for WScale only)
-- First packet only: `src_ip`, `dst_ip`, `sport`, `dport`, `protocol`
-
-**Fix:** Replace Scapy objects with a `__slots__` dataclass immediately after `preprocess()`. This achieves a 10–40× per-packet reduction.
-
-```python
-# flow_reconstruction.py — add near top
-from dataclasses import dataclass
-from typing import Optional
-
-@dataclass(slots=True)
-class PacketRecord:
-    time: float
-    payload_bytes: int
-    direction: int          # Direction.value — avoid enum overhead
-    tcp_flags: int          # 0 for UDP
-    tcp_window: int         # 0 for UDP
-    tcp_wscale: int         # 2**WScale option value; 1 if absent (SYN only)
-    # Metadata (only needed from first packet — store once on flow dict, not per packet)
-
-def scapy_to_record(packet) -> PacketRecord:
-    tcp_flags = 0
-    tcp_window = 0
-    tcp_wscale = 1
-    if TCP in packet:
-        tcp = packet[TCP]
-        tcp_flags = int(tcp.flags)
-        tcp_window = tcp.window
-        if tcp.flags.S and tcp.options:
-            for opt in tcp.options:
-                if opt[0] == 'WScale':
-                    tcp_wscale = 2 ** opt[1]
-                    break
-    return PacketRecord(
-        time=float(packet.time),
-        payload_bytes=packet.payload_bytes,
-        direction=packet.direction.value,
-        tcp_flags=tcp_flags,
-        tcp_window=tcp_window,
-        tcp_wscale=tcp_wscale,
-    )
-```
-
-`calculate_features()` and `calculate_tcp_window_features()` in `flow_features.py` must be updated to access `record.time`, `record.payload_bytes`, `record.tcp_flags`, etc. instead of `packet.time`, `packet[TCP].flags`, etc. The first-packet metadata (src_ip, dst_ip, sport, dport, protocol) must be stored separately on the flow dict at `initiate_new_flow()` time.
-
-**Pros:** Highest single impact. 10–40× per-packet memory reduction. No algorithmic change.
-**Cons:** Requires coordinated changes in `flow_reconstruction.py` and `flow_features.py`. Risk: any packet field accessed downstream that isn't captured will raise `AttributeError`. Mitigation: run full test suite after applying.
+Delivered ~5× reduction in peak RSS alone. All 186 reconstruction tests still pass.
 
 ---
 
-### #2 — Unbounded `network_flows` / `reconstructed_flows` queue in detector mode (~variable, can be large)
+### #2 — Unbounded `network_flows` / `reconstructed_flows` queue in detector mode — **DONE (commit on `memory-optimization` branch)**
 
-**Location:** `run.py` — `detection_offline()` and `detection_online()`
+**Implemented:** new CLI arg `--flow-queue-max-size` (default 2000) sets the cap in `run.py`. `FlowReconstructor` accepts `backpressure=True`; in `_terminated_flows_processor`, offline modes use blocking `put()`, online keeps `enqueue_nowait` (drop for real-time latency). Offline modes (`detection_offline`, `flow_reconstruction_offline`) pass `backpressure=True`.
 
-```python
-network_flows = queue.Queue()   # no maxsize — unbounded!
-```
+Note: this optimization was originally *applied before* #1 and caused a regression (peak RSS doubled) because bounded output forced upstream accumulation in `terminated_flows` queue items that still held raw Scapy packets. With #1 in place, upstream items are cheap and the bound is a net win.
 
-If the TF classifier is slower than flow reconstruction (common with large pcap), all reconstructed flow feature dicts accumulate here indefinitely.
+---
 
-**Fix:** Set `maxsize=2000` (or similar). The existing `enqueue_nowait()` mechanism already handles full queues gracefully (logs + discards). For offline mode, blocking `put()` is preferable to discarding:
+### #2B — `active_flows` / `finalizing_flows` dicts have no hard cap (NEW, PENDING)
 
-```python
-network_flows = queue.Queue(maxsize=2000)
-# In terminated_flows_processor, change enqueue_nowait → blocking put with timeout
-self.reconstructed_flows.put(flow, timeout=30)
-```
+**Location:** `flow_reconstruction.py` — `initiate_new_flow()` adds to `self.active_flows` with no size limit.
 
-**Pros:** Trivial one-line change. Eliminates a whole class of memory blow-up.
-**Cons:** Blocking put slows reconstruction when classifier is the bottleneck. Acceptable for offline mode; use `enqueue_nowait` for online/real-time mode to preserve low latency.
+Current count is implicitly bounded by flow termination (idle/activity timeouts, FIN/RST). A pathological pcap (e.g. SYN-flood-like pattern with many short-lived half-open connections arriving faster than the timeout thread terminates them) could still grow these dicts arbitrarily, especially since each entry now carries up to `max_packets` PacketRecords.
+
+**Possible fixes:**
+- Hard cap on `len(active_flows) + len(finalizing_flows)`; when reached, evict oldest active flow (terminate by `"overflow"`) — but this *drops data*, acceptable only if we document the limit.
+- Propagate backpressure upstream instead: when the dict count is high, delay consuming from `packet_queue` so the pcap reader stalls. Cleaner for offline.
+
+**Priority:** Not observed as a peak-RSS driver on the current test dataset, but necessary for a true "predictable upper bound on any input" guarantee.
+
+---
+
+### #2C — `packet_queue` and `terminated_flows` still drop in offline mode (NEW, PENDING)
+
+**Location:** `flow_reconstruction.py` — `online()` packet_handler, `offline()` for-loop, and `terminate_flow()` use `enqueue_nowait` which silently discards when full. The `backpressure` flag introduced for #2 only applies to `reconstructed_flows`.
+
+For offline correctness the two upstream queues should also block when full, so the `RawPcapReader` stalls instead of losing data.
+
+**Fix sketch:** extend the `backpressure` flag to gate `enqueue_nowait` → blocking `put` for `packet_queue` and `terminated_flows` in offline mode too. Online mode keeps drop-on-full for real-time latency.
 
 ---
 
@@ -194,7 +170,7 @@ flows_batch.append(flow)
 ```
 venv/Scripts/python profile_memory.py
 ```
-Records RSS every 0.5 s. Results in `memory_profile/memory_samples.csv` and `memory_profile/memory_usage.png`.
+Records RSS every 0.5 s. On `memory-optimization` branch results are suffixed with the short commit hash (e.g. `memory_samples_6cf5eb5.csv`, `memory_usage_6cf5eb5.png`). On `main` the files are unsuffixed.
 
 ### 2. Hotspot identification (tracemalloc)
 Use the `/mem-analyze` skill to inject tracemalloc into the subprocess and capture top allocations at peak memory.
@@ -218,15 +194,21 @@ After any change, verify:
 
 ## Optimization Priority
 
-| # | Change | Est. RSS reduction | Code risk | Lines changed |
-|---|--------|--------------------|-----------|---------------|
-| 1 | Scapy → PacketRecord slots dataclass | 60–80% | Medium | ~50 |
-| 2 | Bound network_flows queue | 5–20% | Low | 1 |
-| 3 | TF memory growth flag | 5–15% | Low | 3 |
-| 4 | GC freeze after model load | 2–5% | Low | 4 |
-| 5 | Strip seq fields in analyze_flows | 2–5% | Low | 5 |
+| # | Change | Est. RSS reduction | Status |
+|---|--------|--------------------|--------|
+| 1 | Scapy → PacketRecord slots dataclass | **−81% peak RSS (measured)** | Done `6cf5eb5` |
+| 2 | Bound `network_flows` queue with offline backpressure | small on its own; load-bearing for #2B/C | Done |
+| 2B | Cap `active_flows` / `finalizing_flows` dicts or propagate backpressure | correctness, not peak | Pending |
+| 2C | Extend backpressure to `packet_queue` and `terminated_flows` | correctness, not peak | Pending |
+| 3 | TF memory growth flag | 5–15% | Pending |
+| 4 | GC freeze after model load | 2–5% | Pending |
+| 5 | Strip seq fields in `analyze_flows` | 2–5% | Pending |
 
-Apply in order. Re-profile after each step.
+## Lessons Learned
+
+- **Sequencing matters: #2 before #1 was a regression.** Bounding the post-feature-calc `network_flows` queue while upstream queues still held heavy Scapy packet objects just moved the backpressure to heavier items (`terminated_flows` at 10 k × ~3 KB/pkt × dozens of pkts/flow). Peak RSS *doubled*. After #1 landed, items at every stage are cheap and #2's bound became a net win.
+- **Bound memory by *byte-equivalent*, not item count.** A 2 k queue of lightweight flow-feature dicts ≪ a 10 k queue of flow dicts each containing a list of Scapy packets. Queue `maxsize` is meaningful only once item size is known and stable.
+- **Analyzer-slower-than-reconstructor was suspected, not measured.** Before extending backpressure or tuning queue sizes further, instrument `_analyze_flows` with `perf_counter` around `model.predict()` and batch-fill waits to confirm where time goes.
 
 ---
 

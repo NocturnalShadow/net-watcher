@@ -34,7 +34,7 @@ def to_local_time(timestamp):
 
 def pretty_print_flow(flow, label=""):
     protocol = Protocol(flow['protocol']).name
-    curent_time = to_local_time(time.time())
+    curent_time = to_local_time(time.time()) # TODO: use flow start time instead of current time
     duration_s = flow['duration_s']
     if duration_s < 1:
         duration_str = f"{round(duration_s * 1000)} ms"
