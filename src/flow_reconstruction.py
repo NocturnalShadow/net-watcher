@@ -387,7 +387,10 @@ class FlowReconstructor:
             if reason is not None:
                 flow["termination_reason"] = reason
             log.debug(f"Flow {flow_id} terminated because of {flow['termination_reason']}")
-            self.enqueue_nowait(self.terminated_flows, flow, "terminated flow")
+            if self.backpressure:
+                self.terminated_flows.put(flow)
+            else:
+                self.enqueue_nowait(self.terminated_flows, flow, "terminated flow")
         else:
             log.error(f"Flow {flow_id} not found among flows.")
             log.error(f"Active flows: {self.active_flows.keys()}")
