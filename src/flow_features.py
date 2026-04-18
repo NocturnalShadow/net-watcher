@@ -1,8 +1,6 @@
 import pandas as pd
 import statistics
 
-from scapy.all import TCP
-
 from enums import *
 from logging_utils import log
 
@@ -141,25 +139,19 @@ def calculate_tcp_window_features(flow, packets):
     ack_window_sizes = {Direction.FORWARD: [], Direction.BACKWARD: []}
 
     for packet in packets:
-        tcp_packet = packet[TCP]
         direction = packet.direction
-        flags = tcp_packet.flags
+        flags = packet.tcp_flags
 
-        if flags.S: 
-            if tcp_packet.options:
-                for option in tcp_packet.options:
-                    # Check for window scaling option during handshake (SYN packets)
-                    if option[0] == 'WScale':
-                        features[direction]["window_scaling_factor"] = 2 ** option[1]
-                        break
-
-            features[direction]['initial_window_size'] = tcp_packet.window
+        if flags & TCPFlag.SYN:
+            # WScale was pre-extracted at PacketRecord creation; defaults to 1 if absent.
+            features[direction]["window_scaling_factor"] = packet.tcp_wscale
+            features[direction]['initial_window_size'] = packet.tcp_window
 
         # Adjust window size by scaling factor
-        packet_window_size = tcp_packet.window * features[direction]["window_scaling_factor"]
+        packet_window_size = packet.tcp_window * features[direction]["window_scaling_factor"]
 
         # Only consider ACK packets for window size stats (other than initial_window_size)
-        if flags.A:
+        if flags & TCPFlag.ACK:
             ack_window_sizes[direction].append(packet_window_size)
 
     # Calculate average and standard deviation for window sizes
@@ -185,21 +177,25 @@ def calculate_tcp_window_features(flow, packets):
 def calculate_features(flow):
     # NOTE: flow packets must be preprocessed before calling this function
     packets = flow["packets"]
-    packet = packets[0]
     interarrival_time_s_seq = [float(packets[i].time - packets[i-1].time) for i in range(1, len(packets))] if len(packets) > 1 else []
     payload_bytes_seq = [packet.payload_bytes for packet in packets]
+    src_ip = flow["src_ip"]
+    dst_ip = flow["dst_ip"]
+    sport = flow["sport"]
+    dport = flow["dport"]
+    protocol = flow["protocol"]
     # TODO: consider merging with the flow object to avoid different meanign of "flow" in different contexts (or just use classes)
-    flow = { 
-        "id": f"{packet.src_ip}-{packet.dst_ip}-{packet.sport}-{packet.dport}-{packet.protocol}",
-        "timestamp": float(packet.time),
-        "src_ip": packet.src_ip,
-        "dst_ip": packet.dst_ip,
-        "src_port": packet.sport,
-        "dst_port": packet.dport,
-        "protocol": packet.protocol,
+    flow = {
+        "id": f"{src_ip}-{dst_ip}-{sport}-{dport}-{protocol}",
+        "timestamp": float(packets[0].time),
+        "src_ip": src_ip,
+        "dst_ip": dst_ip,
+        "src_port": sport,
+        "dst_port": dport,
+        "protocol": protocol,
         "termination_reason": flow["termination_reason"],
-        "duration_s": float(last_packet_time(flow) - first_packet_time(flow)),
-        "packets_count": len(flow["packets"]),
+        "duration_s": float(packets[-1].time - packets[0].time),
+        "packets_count": len(packets),
         "payload_bytes_seq": payload_bytes_seq,
         "payload_bytes_total": sum(payload_bytes_seq),
         "payload_bytes_min": min(payload_bytes_seq) if payload_bytes_seq else 0, # Consider discarding SYN, FIN and RST min (or remove this feature altogether)
@@ -229,15 +225,15 @@ def calculate_features(flow):
     flow["payload_bytes_std_nonzero"] = statistics.stdev(payload_bytes_seq_nonzero) if len(payload_bytes_seq_nonzero) > 1 else 0
 
     if flow["protocol"] == Protocol.TCP.value:
-        flags = [packet[TCP].flags for packet in packets]
-        flow["syn_count"] = sum([1 for flag in flags if flag.S])
-        flow["fin_count"] = sum([1 for flag in flags if flag.F])
-        flow["rst_count"] = sum([1 for flag in flags if flag.R])
-        flow["ack_count"] = sum([1 for flag in flags if flag.A])
-        flow["psh_count"] = sum([1 for flag in flags if flag.P])
-        flow["urg_count"] = sum([1 for flag in flags if flag.U])
-        flow["ece_count"] = sum([1 for flag in flags if flag.E])
-        flow["cwr_count"] = sum([1 for flag in flags if flag.C])
+        flags = [packet.tcp_flags for packet in packets]
+        flow["syn_count"] = sum([1 for flag in flags if flag & TCPFlag.SYN])
+        flow["fin_count"] = sum([1 for flag in flags if flag & TCPFlag.FIN])
+        flow["rst_count"] = sum([1 for flag in flags if flag & TCPFlag.RST])
+        flow["ack_count"] = sum([1 for flag in flags if flag & TCPFlag.ACK])
+        flow["psh_count"] = sum([1 for flag in flags if flag & TCPFlag.PSH])
+        flow["urg_count"] = sum([1 for flag in flags if flag & TCPFlag.URG])
+        flow["ece_count"] = sum([1 for flag in flags if flag & TCPFlag.ECE])
+        flow["cwr_count"] = sum([1 for flag in flags if flag & TCPFlag.CWR])
 
         calculate_tcp_window_features(flow, packets)
 

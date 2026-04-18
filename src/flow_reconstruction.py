@@ -2,6 +2,7 @@ import threading
 import queue
 import time
 import gc
+from dataclasses import dataclass
 
 from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, sniff, conf
 from scapy.utils import RawPcapNgReader
@@ -10,6 +11,43 @@ from flow_features import calculate_features, first_packet_time, last_packet_tim
 from enums import Direction, FlowTerminationReason, Protocol
 from logging_utils import log
 
+
+@dataclass(slots=True)
+class PacketRecord:
+    """Lightweight per-packet record; replaces Scapy packet objects in flow["packets"]."""
+    time: float
+    payload_bytes: int
+    direction: object       # Direction enum
+    tcp_flags: int          # 0 for non-TCP
+    tcp_window: int         # 0 for non-TCP
+    tcp_wscale: int         # WScale option value from SYN options; 1 if absent or non-TCP
+
+
+def _to_record(packet, direction):
+    """Convert a Scapy packet to a lightweight PacketRecord."""
+    tcp_flags = 0
+    tcp_window = 0
+    tcp_wscale = 1
+    if TCP in packet:
+        tcp = packet[TCP]
+        tcp_flags = int(tcp.flags)
+        tcp_window = tcp.window
+        if tcp.flags.S and tcp.options:
+            for opt in tcp.options:
+                if opt[0] == 'WScale':
+                    tcp_wscale = 2 ** opt[1]
+                    break
+    return PacketRecord(
+        time=float(packet.time),
+        payload_bytes=packet.payload_bytes,
+        direction=direction,
+        tcp_flags=tcp_flags,
+        tcp_window=tcp_window,
+        tcp_wscale=tcp_wscale,
+    )
+
+# TODO: create separate records for UDP and TCP packets, to avoid storing irrelevant fields (e.g. TCP flags for UDP packets)
+# TODO: create separate queues and dictionaries for TCP and UDP flows
 # TODO: consider different timeout values for different protocols (e.g. TCP vs UDP)
 # TODO: Analyze dataset to: 
 # - determine the optimal values for timeouts
@@ -246,10 +284,10 @@ class FlowReconstructor:
             # We need to terminate the current flow and start a new one
             # self.terminate_finalizing_flow(flow_id) # TODO: reproduce Queue.Full exception + no ability to stop the process
             self.terminate_flow(self.finalizing_flows, flow_id)
-            flow = self.initiate_new_flow(flow_id, packet)     
+            flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
-            flow["packets"].append(packet)
+            flow["packets"].append(_to_record(packet, packet.direction))
 
         if packet_tcp.flags.F:
             self.finalize_flow(flow_id, "FIN")
@@ -268,7 +306,7 @@ class FlowReconstructor:
             flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
-            flow["packets"].append(packet)
+            flow["packets"].append(_to_record(packet, packet.direction))
 
     def find_flow(self, flow_id, packet):
         def find_flow_by_id(flows, flow_id, packet):
@@ -291,13 +329,19 @@ class FlowReconstructor:
 
     def initiate_new_flow(self, flow_id, packet):
         log.debug(f"Initiating new flow {flow_id}")
+        packet.direction = Direction.FORWARD
         flow = {
-            "packets": [packet],
+            # 5-tuple metadata stored once on the flow; PacketRecords don't carry it.
+            "src_ip": packet.src_ip,
+            "dst_ip": packet.dst_ip,
+            "sport": packet.sport,
+            "dport": packet.dport,
+            "protocol": packet.protocol,
+            "packets": [_to_record(packet, Direction.FORWARD)],
             "termination_reason": FlowTerminationReason.UNKNOWN.value,
         }
 
         self.active_flows[flow_id] = flow
-        packet.direction = Direction.FORWARD
         return flow
 
     # Only applicable to TCP flows
