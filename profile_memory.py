@@ -21,9 +21,22 @@ OUTPUT_PATH = "memory_profile/events/"
 RESULTS_DIR = "memory_profile"
 SAMPLE_INTERVAL = 0.5  # seconds between memory samples
 
+
+def short_commit_hash():
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
 def run():
     os.makedirs(RESULTS_DIR, exist_ok=True)
     os.makedirs(OUTPUT_PATH, exist_ok=True)
+    commit = short_commit_hash()
 
     python = os.path.join("venv", "Scripts", "python.exe")  # Windows
     if not os.path.exists(python):
@@ -88,7 +101,7 @@ def run():
         return
 
     # Save raw data
-    data_path = os.path.join(RESULTS_DIR, "memory_samples.csv")
+    data_path = os.path.join(RESULTS_DIR, f"memory_samples_{commit}.csv")
     with open(data_path, "w") as f:
         f.write("time_s,rss_mb\n")
         for t, m in zip(timestamps, rss_mb):
@@ -102,7 +115,7 @@ def run():
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("RSS Memory (MB)")
     ax.set_title("net-watcher detector — memory usage over time\n"
-                 f"Input: {INPUT_PATH}  |  Duration: {elapsed_total:.1f}s  |  Peak: {max(rss_mb):.1f} MB")
+                 f"Commit: {commit}  |  Input: {INPUT_PATH}  |  Duration: {elapsed_total:.1f}s  |  Peak: {max(rss_mb):.1f} MB")
     ax.legend()
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
     ax.grid(True, which="major", linestyle="--", alpha=0.5)
@@ -110,7 +123,7 @@ def run():
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
 
-    graph_path = os.path.join(RESULTS_DIR, "memory_usage.png")
+    graph_path = os.path.join(RESULTS_DIR, f"memory_usage_{commit}.png")
     fig.savefig(graph_path, dpi=150, bbox_inches="tight")
     print(f"Graph saved to {graph_path}")
     plt.close(fig)

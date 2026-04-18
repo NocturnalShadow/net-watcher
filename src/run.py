@@ -68,6 +68,7 @@ def main():
     parser.add_argument('--flow-activity-timeout', type=int, default=1000, help='Flow activity timeout in seconds')
     parser.add_argument('--flow-idle-timeout', type=int, default=600, help='Flow idle timeout in seconds')
     parser.add_argument('--flow-max-packets', type=int, default=100, help='Maximum number of packets per non-TCP flow. If the limit is exceeded, flow is closed and a new one is be created.')
+    parser.add_argument('--flow-queue-max-size', type=int, default=2000, help='Maximum number of reconstructed flows queued for processing.')
     parser.add_argument('--stats-log-step', type=int, default=100_000, help='Log traffic processing statistics every N packets')
     parser.add_argument('--log-path', type=str, help='Path to the application log file. If not specified, logs will be sent to stdout.')
     parser.add_argument('--model-path', type=str, default='artifacts/icsx-ctu-extended/dnn_16_16_16.keras', help='Path to the Keras model file (default: artifacts/icsx-ctu-extended/dnn_16_16_16.keras)')
@@ -156,7 +157,7 @@ def detection_online(**kwargs):
     event_log_rotator_thread = start_log_rotation(
         event_log_file, interval=60, max_log_files=10, max_file_size=5*1024*1024) # TODO: make configurable
 
-    network_flows = queue.Queue()
+    network_flows = queue.Queue(maxsize=kwargs.get("flow_queue_max_size"))
     flow_analyzer_thread = threading.Thread(
         target=analyze_flows,
         args=(network_flows, event_log_file, output_filter),
@@ -184,7 +185,7 @@ def detection_offline(**kwargs):
         log.info(f"Running threat detection for {input_pcap_file}")
         log.info(f"Detection events will be logged to {event_log_file}")
 
-        network_flows = queue.Queue()
+        network_flows = queue.Queue(maxsize=kwargs.get("flow_queue_max_size"))
         flow_analyzer_thread = threading.Thread(
             target=analyze_flows,
             args=(network_flows, event_log_file, output_filter),
@@ -192,7 +193,7 @@ def detection_offline(**kwargs):
             daemon=True)
         flow_analyzer_thread.start()
 
-        with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
+        with FlowReconstructor(output_queue=network_flows, backpressure=True, **kwargs) as reconstructor:
             reconstructor.offline(input_pcap_file)
 
         network_flows.put(None)
@@ -205,7 +206,7 @@ def detection_offline(**kwargs):
 def flow_reconstruction_online(**kwargs):
     output_path = setup_sniff_output_path(**kwargs)
 
-    network_flows = queue.Queue()
+    network_flows = queue.Queue(maxsize=kwargs.get("flow_queue_max_size"))
     flows_writer_thread = batch_process_async(
         network_flows,
         lambda buffer: save_as_df(buffer, output_path),
@@ -227,13 +228,13 @@ def flow_reconstruction_offline(**kwargs):
     os.makedirs(output_path, exist_ok=True)
 
     def process_pcap_file(input_pcap_file, output_path):
-        network_flows = queue.Queue()
+        network_flows = queue.Queue(maxsize=kwargs.get("flow_queue_max_size"))
         flows_writer = batch_process_async(
             network_flows,
             lambda buffer: save_as_df(buffer, output_path),
             batch_size=kwargs.get("output_batch_size"))
 
-        with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
+        with FlowReconstructor(output_queue=network_flows, backpressure=True, **kwargs) as reconstructor:
             reconstructor.offline(input_pcap_file)
 
         network_flows.put(None)

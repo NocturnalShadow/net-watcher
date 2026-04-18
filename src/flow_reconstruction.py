@@ -22,6 +22,8 @@ class FlowReconstructor:
         self.max_packets = int(kwargs.get("flow_max_packets", 100))
         self.net_interface = kwargs.get("net_interface", conf.iface)
         self.filter = kwargs.get("filter", "tcp")
+        # If True, blocks put when output_queue is full, instead of discarding flows.
+        self.backpressure = bool(kwargs.get("backpressure", False))
 
         assert self.idle_timeout > 0, "Idle timeout must be greater than 0"
         assert self.activity_timeout > 0, "Activity timeout must be greater than 0"
@@ -373,7 +375,10 @@ class FlowReconstructor:
             if flow is None:
                 return
             flow = calculate_features(flow)
-            self.enqueue_nowait(self.reconstructed_flows, flow, "reconstructed flow")
+            if self.backpressure:
+                self.reconstructed_flows.put(flow)
+            else:
+                self.enqueue_nowait(self.reconstructed_flows, flow, "reconstructed flow")
 
             self.reconstructed_flows_count += 1
 
