@@ -23,3 +23,4 @@ draft.ipynb
 *.key
 pcap/
 memory_profile/
+.claude/settings.local.json
