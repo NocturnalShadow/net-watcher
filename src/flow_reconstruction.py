@@ -4,6 +4,7 @@ import time
 import gc
 
 from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, sniff, conf
+from scapy.utils import RawPcapNgReader
 
 from flow_features import calculate_features, first_packet_time, last_packet_time
 from enums import Direction, FlowTerminationReason, Protocol
@@ -140,14 +141,20 @@ class FlowReconstructor:
         udp_enabled = "udp" in self.filter
         log.info(f"UDP enabled: {udp_enabled}")
 
-        # TODO: solve meta.sec issue with pcapng files
-        for pkt_data, pkt_meta in RawPcapReader(source):
+        reader = RawPcapReader(source)
+        # Pick the timestamp extractor once: pcap uses .sec/.usec; pcapng uses tshigh/tslow/tsresol.
+        if isinstance(reader, RawPcapNgReader):
+            extract_time = lambda m: ((m.tshigh << 32) | m.tslow) / m.tsresol
+        else:
+            extract_time = lambda m: m.sec + m.usec / 1_000_000
+
+        for pkt_data, pkt_meta in reader:
             if len(pkt_data) >= 14:
                 packet = Ether(pkt_data)
             else:
                 continue
-            
-            packet.time = pkt_meta.sec + pkt_meta.usec / 1_000_000
+
+            packet.time = extract_time(pkt_meta)
             
             # TODO: allow more protocols
             if (tcp_enabled and TCP in packet) or (udp_enabled and UDP in packet):

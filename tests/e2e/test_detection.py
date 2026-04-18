@@ -111,7 +111,7 @@ class TestBenignFalsePositiveRate:
         print(f"  Benign False Positive Rate  (E2E · default threshold)")
         print(f"{'='*52}")
         print(f"  Benign: {ben_total:>6} flows — {ben_alerts:>6} ALERT  {ben_oks:>6} OK")
-        print(f"  {'─'*48}")
+        print(f"  {'-'*48}")
         print(f"  False Positive Rate:  {fpr:.4f}  ({ben_alerts}/{ben_total})")
         print(f"{'='*52}")
 
@@ -167,7 +167,7 @@ class TestMaliciousRecall:
             cls_total = r['alerts'] + r['oks']
             cls_recall = r['alerts'] / cls_total if cls_total else 0.0
             print(f"  {name:<28} {cls_recall:.4f}  ({r['alerts']}/{cls_total})")
-        print(f"  {'─'*48}")
+        print(f"  {'-'*48}")
         print(f"  Overall Recall:  {metrics['recall']:.4f}  ({metrics['mal_alerts']}/{metrics['mal_total']})")
         print(f"{'='*52}")
 

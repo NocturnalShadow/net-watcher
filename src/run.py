@@ -128,6 +128,7 @@ def main():
         log.info(f"Execution completed in {end - start:.2f} seconds.")
     except Exception as e:
         logging.error(e, exc_info=True)
+        sys.exit(1)
     except KeyboardInterrupt:
         logging.info("Execution interrupted by user. Finishing the process...")
 
