@@ -110,9 +110,9 @@ def main():
         if not os.path.isfile(args.scaler_path):
             parser.error(f"Scaler file not found: {args.scaler_path}")
 
+    log_operational_info(args) # TODO: pass kwargs instead of args
+    start = time.perf_counter()
     try:
-        log_operational_info(args) # TODO: pass kwargs instead of args
-        start = time.perf_counter()
         if args.role == 'observer':
             if args.sniff:
                 flow_reconstruction_online(**kwargs)
@@ -125,13 +125,14 @@ def main():
                 detection_offline(**kwargs)
         else:
             raise ValueError(f"Invalid role: {args.role}")
-        end = time.perf_counter()
-        log.info(f"Execution completed in {end - start:.2f} seconds.")
     except Exception as e:
-        logging.error(e, exc_info=True)
+        log.error(e, exc_info=True)
         sys.exit(1)
     except KeyboardInterrupt:
-        logging.info("Execution interrupted by user. Finishing the process...")
+        log.info("Execution interrupted by the user! Exiting...")
+
+    end = time.perf_counter()
+    log.info(f"Execution took {end - start:.2f} seconds.")
 
 def setup_sniff_output_path(**kwargs):
     output_path = kwargs.get("output_path")
@@ -165,12 +166,13 @@ def detection_online(**kwargs):
         daemon=True)
     flow_analyzer_thread.start()
 
-    with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
-        reconstructor.online()
+    try:
+        with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
+            reconstructor.online()
+    finally:
+        network_flows.put(None)
+        flow_analyzer_thread.join()
 
-    network_flows.put(None)
-
-    flow_analyzer_thread.join()
     event_log_rotator_thread.join()
 
 def detection_offline(**kwargs):
@@ -212,11 +214,12 @@ def flow_reconstruction_online(**kwargs):
         lambda buffer: save_as_df(buffer, output_path),
         batch_size=kwargs.get("output_batch_size"))
 
-    with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
-        reconstructor.online()
-
-    network_flows.put(None)
-    flows_writer_thread.join()
+    try:
+        with FlowReconstructor(output_queue=network_flows, **kwargs) as reconstructor:
+            reconstructor.online()
+    finally:
+        network_flows.put(None)
+        flows_writer_thread.join()
 
 def flow_reconstruction_offline(**kwargs):
     input_path = kwargs.get("input_path")

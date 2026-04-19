@@ -4,7 +4,7 @@ import time
 import gc
 from dataclasses import dataclass
 
-from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, sniff, conf
+from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, AsyncSniffer, conf
 from scapy.utils import RawPcapNgReader
 
 from flow_features import calculate_features, first_packet_time, last_packet_time
@@ -170,7 +170,14 @@ class FlowReconstructor:
                 self.update_stats(packet)
 
         assert self.net_interface is not None, "Network interface must be specified for live traffic processing"
-        sniff(filter=self.filter, prn=packet_handler, iface=self.net_interface, store=0)
+        sniffer = AsyncSniffer(filter=self.filter, prn=packet_handler, iface=self.net_interface, store=0)
+        sniffer.start()
+        try:
+            while sniffer.running:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            sniffer.stop()
+            raise
 
     def offline(self, source):
         log.info(f"Reconstructing flows from file: {source} ...")
