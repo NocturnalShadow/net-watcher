@@ -24,4 +24,5 @@ draft.ipynb
 pcap/
 memory_profile/
 .claude/settings.local.json
+.vscode/
 ideas.txt

@@ -9,7 +9,7 @@ import tensorflow as tf
 from datetime import datetime
 from enums import Protocol
 
-from flow_features import flow_to_np_and_meta
+from flow_features import flow_to_np_features
 from logging_utils import *
 
 # Function to classify a single flow
@@ -54,8 +54,8 @@ def analyze_flows(network_flows, event_log_file, output_filter="all", stop_event
         log.error(f"Flow analysis failed: {e}", exc_info=True)
         raise e
 
-def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None,
-                   model_path=None, scaler_path=None):
+def _analyze_flows(network_flows, event_log_file, output_filter, stop_event,
+                   model_path, scaler_path):
     # TODO: turn into enum
     log_ok_events = output_filter == "all" or output_filter == "ok"
     log_alert_events = output_filter == "all" or output_filter == "alerts" 
@@ -68,7 +68,6 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
         scaler = pickle.load(f)
 
     flows_batch = []
-    features_batch = []
     batch_size = 64
     wait_timeout = 2
     threshold = 0.98
@@ -77,7 +76,8 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
     skipped_flows_count = 0
 
     def process_batch():
-        predicted_classes, _ = classify_flows(np.array(features_batch), model, scaler, threshold)
+        features = np.array([flow_to_np_features(f) for f in flows_batch])
+        predicted_classes, _ = classify_flows(features, model, scaler, threshold)
         for flow_class, flow in zip(predicted_classes, flows_batch):
             if flow_class == 1 and log_alert_events:
                 try_log(event_log_file, pretty_print_flow(flow, label="[ALERT]"))
@@ -86,31 +86,28 @@ def _analyze_flows(network_flows, event_log_file, output_filter="all", stop_even
 
     while True:
         if network_flows.qsize() >= batch_size or (time.time() - start_wait_time >= wait_timeout):
-            while not network_flows.empty() and len(features_batch) < batch_size:
+            while not network_flows.empty() and len(flows_batch) < batch_size:
                 flow = network_flows.get()
                 if flow is None:
-                    if features_batch:
+                    if flows_batch:
                         process_batch()
                     log.info(f"Finished analyzing flows in the queue. Analyzed: {analyzed_flows_count}, Skipped: {skipped_flows_count}")
                     return
                 if flow["packets_count"] < 3:
                     skipped_flows_count += 1
                     continue
-                features, _ = flow_to_np_and_meta(flow)
                 flows_batch.append(flow)
-                features_batch.append(features)
                 analyzed_flows_count += 1
 
-            if features_batch:
+            if flows_batch:
                 start_wait_time = time.time()
                 process_batch()
-                features_batch = []
-                metas_batch = []
-        
+                flows_batch = []
+
         if stop_event is not None and stop_event.is_set():
             log.info("Flow analysis was interupted...")
             return
-        
+
         time.sleep(0.1)
 
 if __name__ == "__main__": 

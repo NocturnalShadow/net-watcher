@@ -75,10 +75,8 @@ def get_numeric_feature():
 
 flow_numeric_features = get_numeric_feature()
 
-def flow_to_np_and_meta(flow):
-    features = np.array([flow[field] for field in flow_numeric_features], dtype=np.float32)
-    meta = {k: v for k, v in flow.items() if k not in flow_numeric_features and not k.endswith("_seq")}
-    return features, meta
+def flow_to_np_features(flow):
+    return np.array([flow[field] for field in flow_numeric_features], dtype=np.float32)
 
 def flows_df_to_np(df):
     feature_vectors = []
