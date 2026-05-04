@@ -47,7 +47,7 @@ def pretty_print_flow(flow, label=""):
     return f"{curent_time} {label} {flow_signature}"
 
 def analyze_flows(network_flows, event_log_file, output_filter="all",
-                  model_path=None, scaler_path=None, batch_size=64):
+                  model_path=None, scaler_path=None, batch_size=256):
     try:
         _analyze_flows(network_flows, event_log_file, output_filter,
                        model_path, scaler_path, batch_size)
