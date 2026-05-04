@@ -46,16 +46,16 @@ def pretty_print_flow(flow, label=""):
     return f"{curent_time} {label} {flow_signature}"
 
 def analyze_flows(network_flows, event_log_file, output_filter="all", stop_event=None,
-                  model_path=None, scaler_path=None):
+                  model_path=None, scaler_path=None, batch_size=256):
     try:
         _analyze_flows(network_flows, event_log_file, output_filter, stop_event,
-                       model_path, scaler_path)
+                       model_path, scaler_path, batch_size)
     except Exception as e:
         log.error(f"Flow analysis failed: {e}", exc_info=True)
         raise e
 
 def _analyze_flows(network_flows, event_log_file, output_filter, stop_event,
-                   model_path, scaler_path):
+                   model_path, scaler_path, batch_size):
     # TODO: turn into enum
     log_ok_events = output_filter == "all" or output_filter == "ok"
     log_alert_events = output_filter == "all" or output_filter == "alerts" 
@@ -68,7 +68,6 @@ def _analyze_flows(network_flows, event_log_file, output_filter, stop_event,
         scaler = pickle.load(f)
 
     flows_batch = []
-    batch_size = 64
     wait_timeout = 2
     threshold = 0.98
     start_wait_time = time.time()
