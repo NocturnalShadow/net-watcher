@@ -17,7 +17,7 @@ from logging_utils import *
 def classify_single_flow(flow, model, scaler, threshold=0.98):
     # Scale the flow features
     scaled_flow = scaler.transform([flow])
-    prediction_prob = model.predict(scaled_flow, verbose=0).ravel()[0]
+    prediction_prob = model(scaled_flow, training=False).numpy().ravel()[0]
     predicted_class = (prediction_prob >= threshold).astype(int)
     return predicted_class, prediction_prob
 
@@ -25,7 +25,7 @@ def classify_single_flow(flow, model, scaler, threshold=0.98):
 def classify_flows(flows, model, scaler, threshold=0.98):
     # Scale the flow features
     scaled_flows = scaler.transform(flows)
-    prediction_probs = model.predict(scaled_flows, verbose=0).ravel()
+    prediction_probs = model(scaled_flows, training=False).numpy().ravel()
     predicted_classes = (prediction_probs >= threshold).astype(int)
     return predicted_classes, prediction_probs
 
