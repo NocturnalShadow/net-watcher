@@ -69,6 +69,16 @@ Run E2E detection metrics (prints recall and FPR; use `-s` to see the table):
 python -m pytest tests/e2e/ -v -s
 ```
 
+## Memory profiling
+
+Run the detector against `pcap/net-watcher-test-only/` and sample RSS every 0.5s:
+
+```
+python profile_memory.py
+```
+
+Outputs to `memory_profile/`: `memory_samples_<commit>.csv` (raw samples) and `memory_usage_<commit>.png` (graph). Detection events are written to `memory_profile/events/`.
+
 ## How to package source as an executable
 1. Download and install `pyinstaller`.
 2. Install project dependencies `pip install -r requirements.txt`
@@ -122,14 +132,20 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 - `--role`: Execution role (observer or detector). Required.
 - `--sniff`: Enable online sniffing mode.
 - `--net-interface`: Specify the network interface to capture packets from (used with `--sniff`). If not specified, the default interface is used.
+- `--filter`: BPF-style input traffic filter (default: `tcp`).
 - `--input-path`: Path to a file or directory containing PCAP files for analysis (not used with `--sniff`).
 - `--output-path`: Path to a directory where network flows (for `--role observer`) or detection events (for `--role detector`) will be stored.
 - `--output-filter`: The type of the events to output: `ok`, `alerts` or `all` (`--role detector` only) (default: `alerts`).
 - `--output-batch-size`: Batch size for dumping flows to disk during reconstruction (observer role only) (default: 5000).
+- `--analysis-batch-size`: Number of flows per classification batch (detector role only) (default: 64).
 - `--flow-activity-timeout`: Flow activity timeout in seconds (default: 1000).
 - `--flow-idle-timeout`: Flow idle timeout in seconds (default: 600).
+- `--flow-max-packets`: Maximum number of packets per non-TCP flow; flow is closed and a new one is created on overflow (default: 100).
+- `--flow-queue-max-size`: Maximum number of reconstructed flows queued for processing (default: 10000).
 - `--stats-log-step`: Log traffic processing statistics every N packets (default: 100000).
 - `--log-path`: Path to the application log file. If not specified, logs will be sent to stdout.
+- `--model-path`: Path to the Keras model file (default: `artifacts/icsx-ctu-extended/dnn_16_16_16.keras`).
+- `--scaler-path`: Path to the scaler pickle file (default: `artifacts/icsx-ctu-extended/scaler.pkl`).
 
 ## Detection Event Logs
 
