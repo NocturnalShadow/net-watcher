@@ -2,54 +2,20 @@ import threading
 import queue
 import time
 import gc
-from dataclasses import dataclass
 
-from scapy.all import Ether, IP, IPv6, TCP, UDP, Raw, RawPcapReader, AsyncSniffer, conf
+from scapy.all import RawPcapReader, conf
 from scapy.utils import RawPcapNgReader
 
 from flow_features import calculate_features, first_packet_time, last_packet_time
-from enums import Direction, FlowTerminationReason, Protocol
+from enums import Direction, FlowTerminationReason, Protocol, TCPFlag
+from packet import parse_packet, trim_packet
 from logging_utils import log
 
-
-@dataclass(slots=True)
-class PacketRecord:
-    """Lightweight per-packet record; replaces Scapy packet objects in flow["packets"]."""
-    time: float
-    payload_bytes: int
-    direction: object       # Direction enum
-    tcp_flags: int          # 0 for non-TCP
-    tcp_window: int         # 0 for non-TCP
-    tcp_wscale: int         # WScale option value from SYN options; 1 if absent or non-TCP
-
-
-def _to_record(packet, direction):
-    """Convert a Scapy packet to a lightweight PacketRecord."""
-    tcp_flags = 0
-    tcp_window = 0
-    tcp_wscale = 1
-    if TCP in packet:
-        tcp = packet[TCP]
-        tcp_flags = int(tcp.flags)
-        tcp_window = tcp.window
-        if tcp.flags.S and tcp.options:
-            for opt in tcp.options:
-                if opt[0] == 'WScale':
-                    tcp_wscale = 2 ** opt[1]
-                    break
-    return PacketRecord(
-        time=float(packet.time),
-        payload_bytes=packet.payload_bytes,
-        direction=direction,
-        tcp_flags=tcp_flags,
-        tcp_window=tcp_window,
-        tcp_wscale=tcp_wscale,
-    )
 
 # TODO: create separate records for UDP and TCP packets, to avoid storing irrelevant fields (e.g. TCP flags for UDP packets)
 # TODO: create separate queues and dictionaries for TCP and UDP flows
 # TODO: consider different timeout values for different protocols (e.g. TCP vs UDP)
-# TODO: Analyze dataset to: 
+# TODO: Analyze dataset to:
 # - determine the optimal values for timeouts
 # - check the maximum number of simultaneous unique UDP flows for the timeout parameter (to determine the queue size)
 
@@ -164,20 +130,26 @@ class FlowReconstructor:
 
     def online(self):
         log.info("Reconstructing flows from live traffic...")
-        def packet_handler(packet):
-            self.enqueue_nowait(self.packet_queue, packet, "packet")
-            if self.collect_stats:
-                self.update_stats(packet)
-
         assert self.net_interface is not None, "Network interface must be specified for live traffic processing"
-        sniffer = AsyncSniffer(filter=self.filter, prn=packet_handler, iface=self.net_interface, store=0)
-        sniffer.start()
+
+        # recv_raw returns raw bytes + capture timestamp without dissecting; dpkt
+        # does the parsing. Scapy is used only to open the capture socket, which
+        # has a short read timeout so recv_raw returns periodically and a
+        # KeyboardInterrupt is delivered between iterations.
+        sniffer = conf.L2listen(iface=self.net_interface, filter=self.filter)
         try:
-            while sniffer.running:
-                time.sleep(0.5)
-        except KeyboardInterrupt:
-            sniffer.stop()
-            raise
+            while True:
+                _, raw_packet_data, ts = sniffer.recv_raw()
+                if raw_packet_data is None:
+                    continue
+                packet = parse_packet(raw_packet_data, ts if ts is not None else time.time())
+                if packet is None:
+                    continue
+                self.enqueue_nowait(self.packet_queue, packet, "packet")
+                if self.collect_stats:
+                    self.update_stats(packet)
+        finally:
+            sniffer.close()
 
     def offline(self, source):
         log.info(f"Reconstructing flows from file: {source} ...")
@@ -188,6 +160,7 @@ class FlowReconstructor:
         udp_enabled = "udp" in self.filter
         log.info(f"UDP enabled: {udp_enabled}")
 
+        # Scapy reads the file into raw bytes; dpkt does the parsing.
         reader = RawPcapReader(source)
         # Pick the timestamp extractor once: pcap uses .sec/.usec; pcapng uses tshigh/tslow/tsresol.
         if isinstance(reader, RawPcapNgReader):
@@ -195,20 +168,21 @@ class FlowReconstructor:
         else:
             extract_time = lambda m: m.sec + m.usec / 1_000_000
 
-        for pkt_data, pkt_meta in reader:
-            if len(pkt_data) >= 14:
-                packet = Ether(pkt_data)
-            else:
+        for raw_packet_data, raw_packet_meta in reader:
+            if len(raw_packet_data) < 14:
                 continue
 
-            packet.time = extract_time(pkt_meta)
-            
+            packet = parse_packet(raw_packet_data, extract_time(raw_packet_meta))
+            if packet is None:
+                continue
+
             # TODO: allow more protocols
-            if (tcp_enabled and TCP in packet) or (udp_enabled and UDP in packet):
+            if (tcp_enabled and packet.protocol == Protocol.TCP.value) or \
+               (udp_enabled and packet.protocol == Protocol.UDP.value):
                 self.packet_queue.put(packet)
             else:
                 continue
-            
+
             if self.collect_stats:
                 self.update_stats(packet)
 
@@ -226,67 +200,26 @@ class FlowReconstructor:
                 return
 
             self.current_time = packet.time
-            if TCP in packet:
-                if self.preprocess(packet):
-                    self.process_tcp(packet)
-            elif UDP in packet:
-                if self.preprocess(packet):
-                    self.process_universal(packet)
+            if packet.protocol == Protocol.TCP.value:
+                self.process_tcp(packet)
+            elif packet.protocol == Protocol.UDP.value:
+                self.process_universal(packet)
 
             # in case of out-of-order packets we reset the last_timeout_check to the timeline of the new packet
-            self.last_timeout_check = min(self.current_time, self.last_timeout_check) 
+            self.last_timeout_check = min(self.current_time, self.last_timeout_check)
             if self.current_time - self.last_timeout_check > self.timeout_termination_check_interval:
                 self.last_timeout_check = self.current_time
                 self.terminate_timouted_flows()
 
             self.processed_packets_count += 1
 
-    def preprocess(self, packet):
-        # TODO: debug the case for non-TCP or UDP packets
-        if IP in packet:
-            packet.src_ip = packet[IP].src
-            packet.dst_ip = packet[IP].dst
-            packet.protocol = packet[IP].proto
-        elif IPv6 in packet:
-            packet.src_ip = packet[IPv6].src
-            packet.dst_ip = packet[IPv6].dst
-            packet.protocol = packet[IPv6].nh
-        else:
-            return False
-
-        if packet.protocol not in [Protocol.TCP.value, Protocol.UDP.value]:
-            packet.sport = 0
-            packet.dport = 0
-
-        # Compute payload bytes from transport layer payload. This works whether
-        # the payload is a Raw layer or an auto-dissected protocol layer (e.g.,
-        # Scapy parses DNS on port 53, removing the Raw layer).
-        if UDP in packet:
-            packet.payload_bytes = len(packet[UDP].payload)
-        elif TCP in packet:
-            packet.payload_bytes = len(packet[TCP].payload)
-        else:
-            packet.payload_bytes = 0
-
-        # Remove Raw layer if present (saves memory; payload_bytes already captured)
-        if Raw in packet:
-            current_layer = packet
-            while current_layer.payload:
-                if current_layer.payload.name == "Raw":
-                    current_layer.remove_payload()
-                    break
-                current_layer = current_layer.payload
-
-        return True
-
     def process_tcp(self, packet):
-        packet_tcp = packet[TCP]
         flow_id = (packet.src_ip, packet.dst_ip, packet.sport, packet.dport, packet.protocol)
         flow, flow_id = self.find_flow(flow_id, packet)
         if flow is None:
             # No connection found, we need to start a new flow
             flow = self.initiate_new_flow(flow_id, packet)
-        elif packet_tcp.flags.S and (flow_id in self.finalizing_flows):
+        elif (packet.tcp_flags & TCPFlag.SYN) and (flow_id in self.finalizing_flows):
             # This packet tries to establish a new connection, while existing one is being finalized
             # We need to terminate the current flow and start a new one
             # self.terminate_finalizing_flow(flow_id) # TODO: reproduce Queue.Full exception + no ability to stop the process
@@ -294,11 +227,11 @@ class FlowReconstructor:
             flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
-            flow["packets"].append(_to_record(packet, packet.direction))
+            flow["packets"].append(trim_packet(packet))
 
-        if packet_tcp.flags.F:
+        if packet.tcp_flags & TCPFlag.FIN:
             self.finalize_flow(flow_id, "FIN")
-        elif packet_tcp.flags.R:
+        elif packet.tcp_flags & TCPFlag.RST:
             self.finalize_flow(flow_id, "RST")
 
     def process_universal(self, packet):
@@ -313,10 +246,10 @@ class FlowReconstructor:
             flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
-            flow["packets"].append(_to_record(packet, packet.direction))
+            flow["packets"].append(trim_packet(packet))
 
     def find_flow(self, flow_id, packet):
-        def find_flow_by_id(flows, flow_id, packet):
+        def find_flow_by_id(flows, flow_id):
             flow = flows.get(flow_id)
             if flow is None:
                 # Check for reversed flow
@@ -328,23 +261,23 @@ class FlowReconstructor:
             else:
                 packet.direction = Direction.FORWARD
             return flow, flow_id
-    
-        flow, flow_id = find_flow_by_id(self.active_flows, flow_id, packet)
+
+        flow, flow_id = find_flow_by_id(self.active_flows, flow_id)
         if flow is None:
-            flow, flow_id = find_flow_by_id(self.finalizing_flows, flow_id, packet)
+            flow, flow_id = find_flow_by_id(self.finalizing_flows, flow_id)
         return flow, flow_id
 
     def initiate_new_flow(self, flow_id, packet):
         log.debug(f"Initiating new flow {flow_id}")
         packet.direction = Direction.FORWARD
         flow = {
-            # 5-tuple metadata stored once on the flow; PacketRecords don't carry it.
+            # 5-tuple metadata stored once on the flow; PacketData doesn't carry it.
             "src_ip": packet.src_ip,
             "dst_ip": packet.dst_ip,
             "sport": packet.sport,
             "dport": packet.dport,
             "protocol": packet.protocol,
-            "packets": [_to_record(packet, Direction.FORWARD)],
+            "packets": [trim_packet(packet)],
             "termination_reason": FlowTerminationReason.UNKNOWN.value,
         }
 

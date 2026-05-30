@@ -141,7 +141,7 @@ def calculate_tcp_window_features(flow, packets):
         flags = packet.tcp_flags
 
         if flags & TCPFlag.SYN:
-            # WScale was pre-extracted at PacketRecord creation; defaults to 1 if absent.
+            # WScale was pre-extracted during packet parsing; defaults to 1 if absent.
             features[direction]["window_scaling_factor"] = packet.tcp_wscale
             features[direction]['initial_window_size'] = packet.tcp_window
 
