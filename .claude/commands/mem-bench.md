@@ -1,10 +1,10 @@
 # /mem-bench — Benchmark Memory vs. Performance Trade-off
 
-Compare memory and throughput before and after optimizations. Use this after applying one or more `/mem-optimize` changes to ensure no performance regression.
+Compare memory and throughput before and after a change to ensure no performance regression.
 
 ## Steps
 
-1. **Check if baseline exists** — look for `memory_profile/baseline_memory_samples.csv`. If absent, the current `memory_profile/memory_samples.csv` (if it exists from a pre-optimization run) should be copied to baseline first. Prompt the user: "No baseline found. Should I use the current memory_samples.csv as baseline? (y/n)"
+1. **Check if baseline exists** — look for `memory_profile/baseline_memory_samples.csv`. If absent, the current `memory_profile/memory_samples.csv` (if it exists from a prior run) should be copied to baseline first. Prompt the user: "No baseline found. Should I use the current memory_samples.csv as baseline? (y/n)"
 
 2. **Run profiler on current code**:
    ```bash
@@ -27,12 +27,11 @@ Compare memory and throughput before and after optimizations. Use this after app
 5. **Check for data quality regression** — scan the most recent event log in `memory_profile/events/` for `discarded` messages. If any flows were discarded that weren't in the baseline run, flag it.
 
 6. **Verdict**:
-   - ✓ **Memory target met**: Peak RSS < 1024 MB
    - ✓ **No throughput regression**: runtime delta < +5%
    - ✓ **No data loss regression**: no new `discarded` warnings
    - ✗ Flag any criterion that fails with specific numbers
 
-7. **Save baseline** if the user confirms the current optimized version is the new reference:
+7. **Save baseline** if the user confirms the current version is the new reference:
    ```bash
    cp memory_profile/memory_samples.csv memory_profile/baseline_memory_samples.csv
    ```

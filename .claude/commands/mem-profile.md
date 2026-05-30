@@ -1,6 +1,6 @@
 # /mem-profile — Run Memory Profiler & Interpret Results
 
-Run the memory profiler against the `net-watcher-test-only` dataset and produce an interpreted summary. Always execute this before and after any optimization to measure impact.
+Run the memory profiler against the `net-watcher-test-only` dataset and produce an interpreted summary. Useful before and after any change that could affect memory or throughput.
 
 ## Steps
 
@@ -36,9 +36,6 @@ Run the memory profiler against the `net-watcher-test-only` dataset and produce 
    ## Interpretation
    [Analysis of what the profile shape indicates — e.g., "Steady climb with no release
    indicates flows are accumulating in memory faster than they are GC'd"]
-
-   ## Next Steps
-   [Recommend which optimization from CLAUDE.md to apply first based on profile shape]
    ```
 
 ## Notes

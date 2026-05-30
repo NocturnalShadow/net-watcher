@@ -23,6 +23,7 @@ draft.ipynb
 *.key
 pcap/
 memory_profile/
+temp/
 .claude/settings.local.json
 .vscode/
 ideas.txt
