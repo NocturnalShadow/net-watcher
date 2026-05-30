@@ -42,11 +42,27 @@ class Packet:
     direction: object = Direction.UNKNOWN
 
 
-def parse_packet(raw_packet_data, ts):
-    """Parse raw Ethernet bytes into a Packet (TCP/UDP only), or None."""
+def resolve_link_layer_dissector(data_link_type):
+    """Return the dpkt link-layer dissector for a libpcap DLT, or raise error."""
+    # See https://www.tcpdump.org/linktypes.html for DLT all values.
+    DLT_NULL = 0    # BSD loopback encapsulation
+    DLT_EN10MB = 1  # Ethernet (10Mb, 100Mb, 1000Mb, and up)
+    link_layer_dissector = {
+        DLT_NULL: dpkt.loopback.Loopback,
+        DLT_EN10MB: dpkt.ethernet.Ethernet,
+    }
+
     try:
-        eth = dpkt.ethernet.Ethernet(raw_packet_data)
-        ip = eth.data
+        return link_layer_dissector[data_link_type]
+    except KeyError:
+        raise ValueError(f"Unsupported link-layer type (DLT {data_link_type}); "
+                         f"supported: {sorted(link_layer_dissector)}")
+
+
+def parse_packet(raw_packet_data, timestamp, link_layer_dissector=dpkt.ethernet.Ethernet):
+    """Parse raw link-layer bytes into a Packet (TCP/UDP only), or None."""
+    try:
+        ip = link_layer_dissector(raw_packet_data).data
         if isinstance(ip, dpkt.llc.LLC):  # 802.3 LLC/SNAP -> unwrap to L3
             ip = ip.data
         if isinstance(ip, dpkt.ip.IP):
@@ -70,14 +86,14 @@ def parse_packet(raw_packet_data, ts):
                         tcp_wscale = 2 ** val[0]
                         break
             return Packet(
-                time=float(ts), src_ip=src_ip, dst_ip=dst_ip,
+                time=float(timestamp), src_ip=src_ip, dst_ip=dst_ip,
                 sport=l4.sport, dport=l4.dport, protocol=protocol,
                 payload_bytes=len(l4.data),
                 tcp_flags=flags, tcp_window=l4.win, tcp_wscale=tcp_wscale,
             )
         if isinstance(l4, dpkt.udp.UDP):
             return Packet(
-                time=float(ts), src_ip=src_ip, dst_ip=dst_ip,
+                time=float(timestamp), src_ip=src_ip, dst_ip=dst_ip,
                 sport=l4.sport, dport=l4.dport, protocol=protocol,
                 payload_bytes=len(l4.data),
                 tcp_flags=0, tcp_window=0, tcp_wscale=1,

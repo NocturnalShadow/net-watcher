@@ -6,9 +6,9 @@ import gc
 from scapy.all import RawPcapReader, conf
 from scapy.utils import RawPcapNgReader
 
-from flow_features import calculate_features, first_packet_time, last_packet_time
 from enums import Direction, FlowTerminationReason, Protocol, TCPFlag
-from packet import parse_packet, trim_packet
+from flow_features import calculate_features, first_packet_time, last_packet_time
+from packet_parsing import parse_packet, resolve_link_layer_dissector, trim_packet
 from logging_utils import log
 
 
@@ -137,12 +137,15 @@ class FlowReconstructor:
         # has a short read timeout so recv_raw returns periodically and a
         # KeyboardInterrupt is delivered between iterations.
         sniffer = conf.L2listen(iface=self.net_interface, filter=self.filter)
+        link_layer_dissector = resolve_link_layer_dissector(sniffer.pcap_fd.datalink())
         try:
-            while True:
-                _, raw_packet_data, ts = sniffer.recv_raw()
+            while not self.stop_event.is_set():
+                _, raw_packet_data, timestamp = sniffer.recv_raw()
                 if raw_packet_data is None:
                     continue
-                packet = parse_packet(raw_packet_data, ts if ts is not None else time.time())
+                if timestamp is None: # TODO: consider if we should always use the system time for live traffic
+                    timestamp = time.time()
+                packet = parse_packet(raw_packet_data, timestamp, link_layer_dissector)
                 if packet is None:
                     continue
                 self.enqueue_nowait(self.packet_queue, packet, "packet")

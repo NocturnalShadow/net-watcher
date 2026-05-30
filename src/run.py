@@ -94,7 +94,7 @@ def main():
     if args.sniff and args.input_path:
         parser.error("--sniff and --input-path cannot be used together.")
     if args.net_interface:
-        if args.sniff:
+        if not args.sniff:
             parser.error("--net-interface can only be used with --sniff.")
     else:
         # use default network interface if not specified
