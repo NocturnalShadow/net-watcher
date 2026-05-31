@@ -27,3 +27,6 @@ temp/
 .claude/settings.local.json
 .vscode/
 ideas.txt
+scripts/
+info/
+benchmarks/

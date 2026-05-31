@@ -11,6 +11,7 @@ class FlowTerminationReason(Enum):
     RST = 2
     ACTIVITY_TIMEOUT = 3
     IDLE_TIMEOUT = 4
+    MAX_PACKETS = 5
 
 class Protocol(Enum):
     UNKNOWN = -1

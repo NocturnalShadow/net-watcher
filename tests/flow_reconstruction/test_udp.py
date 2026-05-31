@@ -56,7 +56,7 @@ class TestUDPSimpleFlow:
         return result[0]
 
     def test_termination_reason(self, flow):
-        assert flow["termination_reason"] == "unknown"
+        assert flow["termination_reason"] == "UNKNOWN"
 
     def test_protocol(self, flow):
         assert flow["protocol"] == 17
@@ -161,20 +161,20 @@ class TestUDPIdleTimeout:
 
     @pytest.fixture(scope="class")
     def main_flow(self, flows):
-        f = next((f for f in flows if f["termination_reason"] == "idle_timeout"), None)
+        f = next((f for f in flows if f["termination_reason"] == "IDLE_TIMEOUT"), None)
         assert f is not None, "No idle_timeout flow found"
         return f
 
     @pytest.fixture(scope="class")
     def probe_flow(self, flows):
-        f = next((f for f in flows if f["termination_reason"] == "unknown"), None)
+        f = next((f for f in flows if f["termination_reason"] == "UNKNOWN"), None)
         assert f is not None, "No unknown-termination flow found"
         return f
 
     # --- main flow ---
 
     def test_main_termination_reason(self, main_flow):
-        assert main_flow["termination_reason"] == "idle_timeout"
+        assert main_flow["termination_reason"] == "IDLE_TIMEOUT"
 
     def test_main_packets_count(self, main_flow):
         assert main_flow["packets_count"] == 3
@@ -191,7 +191,7 @@ class TestUDPIdleTimeout:
     # --- probe flow ---
 
     def test_probe_termination_reason(self, probe_flow):
-        assert probe_flow["termination_reason"] == "unknown"
+        assert probe_flow["termination_reason"] == "UNKNOWN"
 
     def test_probe_packets_count(self, probe_flow):
         assert probe_flow["packets_count"] == 1
@@ -252,20 +252,20 @@ class TestUDPActivityTimeout:
 
     @pytest.fixture(scope="class")
     def flow_1(self, flows):
-        f = next((f for f in flows if f["termination_reason"] == "activity_timeout"), None)
+        f = next((f for f in flows if f["termination_reason"] == "ACTIVITY_TIMEOUT"), None)
         assert f is not None, "No activity_timeout flow found"
         return f
 
     @pytest.fixture(scope="class")
     def flow_2(self, flows):
-        f = next((f for f in flows if f["termination_reason"] == "unknown"), None)
+        f = next((f for f in flows if f["termination_reason"] == "UNKNOWN"), None)
         assert f is not None, "No unknown-termination flow found"
         return f
 
     # --- flow 1 (activity_timeout) ---
 
     def test_flow_1_termination_reason(self, flow_1):
-        assert flow_1["termination_reason"] == "activity_timeout"
+        assert flow_1["termination_reason"] == "ACTIVITY_TIMEOUT"
 
     def test_flow_1_packets_count(self, flow_1):
         assert flow_1["packets_count"] == 4
@@ -282,7 +282,7 @@ class TestUDPActivityTimeout:
     # --- flow 2 (unknown, PCAP end) ---
 
     def test_flow_2_termination_reason(self, flow_2):
-        assert flow_2["termination_reason"] == "unknown"
+        assert flow_2["termination_reason"] == "UNKNOWN"
 
     def test_flow_2_packets_count(self, flow_2):
         assert flow_2["packets_count"] == 2
@@ -390,7 +390,7 @@ class TestUDPMultipleSimultaneousFlows:
 
     def test_all_termination_reasons(self, flows):
         for f in flows:
-            assert f["termination_reason"] == "unknown"
+            assert f["termination_reason"] == "UNKNOWN"
 
     def test_all_protocols(self, flows):
         for f in flows:

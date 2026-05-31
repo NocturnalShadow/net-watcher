@@ -99,7 +99,7 @@ class FlowReconstructor:
 
         # Terminate remaining active flows
         for flow_id in list(self.active_flows.keys()):
-            self.terminate_flow(self.active_flows, flow_id, "unknown")
+            self.terminate_flow(self.active_flows, flow_id, FlowTerminationReason.UNKNOWN.name)
 
         # Emit finalizing flows whose grace period hadn't expired before the PCAP ended.
         # termination_reason (FIN/RST) is already set — do not override it.
@@ -228,14 +228,27 @@ class FlowReconstructor:
             # self.terminate_finalizing_flow(flow_id) # TODO: reproduce Queue.Full exception + no ability to stop the process
             self.terminate_flow(self.finalizing_flows, flow_id)
             flow = self.initiate_new_flow(flow_id, packet)
+        elif flow_id in self.finalizing_flows and \
+                self.current_time - flow["finalization_time"] > self.tcp_termination_grace_period:
+            # Grace period elapsed (pcap-time): the FIN/RST tail is over. Close the flow now,
+            # keeping its FIN/RST reason, and start a fresh flow for this later packet — instead
+            # of absorbing it (which otherwise happens until the terminator thread next wakes).
+            self.terminate_flow(self.finalizing_flows, flow_id)
+            flow = self.initiate_new_flow(flow_id, packet)
+        elif len(flow["packets"]) >= self.max_packets:
+            # Insta-terminate at max_packets to bound memory. Applies to finalizing flows
+            # too (bypassing the grace period), so a post-FIN/RST flood can't grow unbounded.
+            flows = self.active_flows if flow_id in self.active_flows else self.finalizing_flows
+            self.terminate_flow(flows, flow_id, FlowTerminationReason.MAX_PACKETS.name)
+            flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
             flow["packets"].append(trim_packet(packet))
 
         if packet.tcp_flags & TCPFlag.FIN:
-            self.finalize_flow(flow_id, "FIN")
+            self.finalize_flow(flow_id, FlowTerminationReason.FIN.name)
         elif packet.tcp_flags & TCPFlag.RST:
-            self.finalize_flow(flow_id, "RST")
+            self.finalize_flow(flow_id, FlowTerminationReason.RST.name)
 
     def process_universal(self, packet):
         flow_id = (packet.src_ip, packet.dst_ip, packet.sport, packet.dport, packet.protocol)
@@ -245,7 +258,7 @@ class FlowReconstructor:
             flow = self.initiate_new_flow(flow_id, packet)
         elif len(flow["packets"]) >= self.max_packets:
             # If the flow has more packets than max_packets, we terminate it to avoid memory issues
-            self.terminate_flow(self.active_flows, flow_id, "packets_count")
+            self.terminate_flow(self.active_flows, flow_id, FlowTerminationReason.MAX_PACKETS.name)
             flow = self.initiate_new_flow(flow_id, packet)
         else:
             # TODO: Check if the timeout for the active flow was expired
@@ -281,7 +294,7 @@ class FlowReconstructor:
             "dport": packet.dport,
             "protocol": packet.protocol,
             "packets": [trim_packet(packet)],
-            "termination_reason": FlowTerminationReason.UNKNOWN.value,
+            "termination_reason": FlowTerminationReason.UNKNOWN.name,
         }
 
         self.active_flows[flow_id] = flow
@@ -310,11 +323,11 @@ class FlowReconstructor:
             flow_idle_time = self.current_time - last_packet_time(flow)
             flow_activity_time = self.current_time - first_packet_time(flow)
             if flow_idle_time > self.idle_timeout:
-                self.terminate_flow(self.active_flows, flow_id, "idle_timeout")
+                self.terminate_flow(self.active_flows, flow_id, FlowTerminationReason.IDLE_TIMEOUT.name)
             elif flow_activity_time > self.activity_timeout:
-                self.terminate_flow(self.active_flows, flow_id, "activity_timeout")
+                self.terminate_flow(self.active_flows, flow_id, FlowTerminationReason.ACTIVITY_TIMEOUT.name)
             elif flow_activity_time < 0: # out-of-order packets shifted the timeline
-                self.terminate_flow(self.active_flows, flow_id, "unknown")
+                self.terminate_flow(self.active_flows, flow_id, FlowTerminationReason.UNKNOWN.name)
                 self.timeline_shift_terminations_count += 1
 
     def terminate_finalizing_flows(self):

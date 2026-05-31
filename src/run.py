@@ -67,7 +67,7 @@ def main():
     parser.add_argument('--output-batch-size', type=int, default=5000, help='Batch size for dumping the flows to disk during reconstruction (--role observer only)')
     parser.add_argument('--flow-activity-timeout', type=int, default=1000, help='Flow activity timeout in seconds')
     parser.add_argument('--flow-idle-timeout', type=int, default=600, help='Flow idle timeout in seconds')
-    parser.add_argument('--flow-max-packets', type=int, default=100, help='Maximum number of packets per non-TCP flow. If the limit is exceeded, flow is closed and a new one is be created.')
+    parser.add_argument('--flow-max-packets', type=int, default=100, help='Maximum number of packets per flow. If the limit is exceeded, flow is closed and a new one is be created.')
     parser.add_argument('--flow-queue-max-size', type=int, default=10000, help='Maximum number of reconstructed flows queued for processing.')
     parser.add_argument('--analysis-batch-size', type=int, default=64, help='Number of flows per classification batch (default: 64)')
     parser.add_argument('--stats-log-step', type=int, default=100_000, help='Log traffic processing statistics every N packets')

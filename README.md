@@ -71,7 +71,7 @@ python -m pytest tests/e2e/ -v -s
 
 ## Memory profiling
 
-Run the detector against `pcap/net-watcher-test-only/` and sample RSS every 0.5s:
+Run the detector against `pcap/icsx-ctu-extended/test/` and sample RSS every 0.5s:
 
 ```
 python profile_memory.py

@@ -14,7 +14,7 @@ from flow_features import flow_to_np_features
 from logging_utils import *
 
 # Function to classify a single flow
-def classify_single_flow(flow, model, scaler, threshold=0.98):
+def classify_single_flow(flow, model, scaler, threshold=0.66):
     # Scale the flow features
     scaled_flow = scaler.transform([flow])
     prediction_prob = model(scaled_flow, training=False).numpy().ravel()[0]
@@ -22,7 +22,7 @@ def classify_single_flow(flow, model, scaler, threshold=0.98):
     return predicted_class, prediction_prob
 
 # Function to classify a batch of flows
-def classify_flows(flows, model, scaler, threshold=0.98):
+def classify_flows(flows, model, scaler, threshold=0.66):
     # Scale the flow features
     scaled_flows = scaler.transform(flows)
     prediction_probs = model(scaled_flows, training=False).numpy().ravel()
@@ -70,7 +70,7 @@ def _analyze_flows(network_flows, event_log_file, output_filter,
 
     flows_batch = []
     wait_timeout = 2
-    threshold = 0.98
+    threshold = 0.66
     start_wait_time = time.time()
     analyzed_flows_count = 0
     skipped_flows_count = 0

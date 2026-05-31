@@ -17,11 +17,12 @@ import pytest
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 _RUN_PY = os.path.join(_ROOT, 'src', 'run.py')
-_PCAP_ROOT = os.path.join(_ROOT, 'pcap', 'net-watcher-test-only')
+_PCAP_ROOT = os.path.join(_ROOT, 'pcap', 'icsx-ctu-extended', 'test')
 _MALICIOUS_ROOT = os.path.join(_PCAP_ROOT, 'malicious')
 _BENIGN_ROOT = os.path.join(_PCAP_ROOT, 'benign')
 _ARTIFACTS_DIR = os.path.join(_ROOT, 'artifacts', 'icsx-ctu-extended')
 _MODEL_PATH = os.path.join(_ARTIFACTS_DIR, 'dnn_16_16_16.keras')
+# _MODEL_PATH = os.path.join(_ARTIFACTS_DIR, 'dnn_24_24_24.keras')
 _SCALER_PATH = os.path.join(_ARTIFACTS_DIR, 'scaler.pkl')
 
 
@@ -118,8 +119,8 @@ class TestBenignFalsePositiveRate:
         return {'fpr': fpr, 'ben_alerts': ben_alerts, 'ben_total': ben_total}
 
     def test_false_positive_rate(self, metrics):
-        assert metrics['fpr'] < 0.0029, (
-            f"FPR {metrics['fpr']:.4f} exceeds threshold 0.0029 "
+        assert metrics['fpr'] < 0.0031, (
+            f"FPR {metrics['fpr']:.4f} exceeds threshold 0.0031 "
             f"({metrics['ben_alerts']}/{metrics['ben_total']})"
         )
 
@@ -173,35 +174,35 @@ class TestMaliciousRecall:
 
     # Overall
     def test_recall(self, metrics):
-        assert metrics['recall'] >= 0.624, (
-            f"Recall {metrics['recall']:.4f} < 0.624 "
+        assert metrics['recall'] >= 0.830, (
+            f"Recall {metrics['recall']:.4f} < 0.830 "
             f"({metrics['mal_alerts']}/{metrics['mal_total']})"
         )
 
     # Per-class
     def test_recall_donbot(self, metrics):
         r = _class_recall(metrics, 'DonBot')
-        assert r >= 0.994, f"DonBot recall {r:.4f} < 0.994"
+        assert r >= 0.910, f"DonBot recall {r:.4f} < 0.910"
 
     def test_recall_emotet(self, metrics):
         r = _class_recall(metrics, 'Emotet')
-        assert r >= 0.870, f"Emotet recall {r:.4f} < 0.870"
+        assert r >= 0.970, f"Emotet recall {r:.4f} < 0.970"
 
     def test_recall_kazy(self, metrics):
         r = _class_recall(metrics, 'Kazy')
-        assert r >= 0.264, f"Kazy recall {r:.4f} < 0.264"
+        assert r >= 0.530, f"Kazy recall {r:.4f} < 0.530"
 
     def test_recall_murlo(self, metrics):
         r = _class_recall(metrics, 'Murlo')
-        assert r >= 0.106, f"Murlo recall {r:.4f} < 0.106"
+        assert r >= 0.300, f"Murlo recall {r:.4f} < 0.300"
 
     def test_recall_neris(self, metrics):
         r = _class_recall(metrics, 'Neris')
-        assert r >= 0.304, f"Neris recall {r:.4f} < 0.304"
+        assert r >= 0.660, f"Neris recall {r:.4f} < 0.660"
 
     def test_recall_rbot(self, metrics):
         r = _class_recall(metrics, 'RBot')
-        assert r >= 0.032, f"RBot recall {r:.4f} < 0.032"
+        assert r >= 0.940, f"RBot recall {r:.4f} < 0.940"
 
     def test_recall_trickbot(self, metrics):
         r = _class_recall(metrics, 'TrickBot')
@@ -209,11 +210,19 @@ class TestMaliciousRecall:
 
     def test_recall_virut(self, metrics):
         r = _class_recall(metrics, 'Virut')
-        assert r >= 0.105, f"Virut recall {r:.4f} < 0.105"
+        assert r >= 0.950, f"Virut recall {r:.4f} < 0.950"
 
     def test_recall_wannacry(self, metrics):
         r = _class_recall(metrics, 'WannaCry')
-        assert r >= 0.456, f"WannaCry recall {r:.4f} < 0.456"
+        assert r >= 0.610, f"WannaCry recall {r:.4f} < 0.610"
+
+    # Weasel: synthetic, unseen-by-training botnet — generalization probe (lower bar).
+    # Synthetic botnet traffic per Zhao et al., "Botnet detection based on traffic
+    # behavior analysis and flow intervals":
+    # https://www.researchgate.net/publication/259117704_Botnet_detection_based_on_traffic_behavior_analysis_and_flow_intervals
+    def test_recall_weasel(self, metrics):
+        r = _class_recall(metrics, 'Weasel')
+        assert r >= 0.580, f"Weasel recall {r:.4f} < 0.580"
 
     def test_recall_zeus(self, metrics):
         r = _class_recall(metrics, 'Zeus')

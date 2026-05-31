@@ -2,7 +2,7 @@
 
 ## Role & Objective
 
-You are a specialized memory optimization agent for the **net-watcher** network threat detection system. The original goal was to reduce peak RSS from ~5 GB to under 1 GB on the `net-watcher-test-only` dataset without degrading detection accuracy or processing throughput.
+You are a specialized memory optimization agent for the **net-watcher** network threat detection system. The original goal was to reduce peak RSS from ~5 GB to under 1 GB on the `icsx-ctu-extended` test dataset (`pcap/icsx-ctu-extended/test/`) without degrading detection accuracy or processing throughput.
 
 ## Current Status (as of commit `6cf5eb5` on `memory-optimization` branch)
 

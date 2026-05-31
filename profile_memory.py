@@ -1,6 +1,6 @@
 """
 Memory usage profiler for net-watcher detector mode.
-Runs the detector against pcap/net-watcher-test-only/ and records RSS memory over time.
+Runs the detector against pcap/icsx-ctu-extended/test/ and records RSS memory over time.
 
 Usage:
     venv/Scripts/python profile_memory.py
@@ -16,7 +16,7 @@ import psutil
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-INPUT_PATH = "pcap/net-watcher-test-only/"
+INPUT_PATH = "pcap/icsx-ctu-extended/test/"
 OUTPUT_PATH = "memory_profile/events/"
 RESULTS_DIR = "memory_profile"
 SAMPLE_INTERVAL = 0.5  # seconds between memory samples

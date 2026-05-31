@@ -71,7 +71,7 @@ class TestActivityTimeoutTermination:
     @pytest.fixture(scope="class")
     def flow_1(self, flows):
         """First portion, terminated by activity timeout."""
-        return flows["activity_timeout"]
+        return flows["ACTIVITY_TIMEOUT"]
 
     @pytest.fixture(scope="class")
     def flow_2(self, flows):
@@ -81,7 +81,7 @@ class TestActivityTimeoutTermination:
     # --- flow 1 (activity_timeout) ---
 
     def test_flow_1_termination_reason(self, flow_1):
-        assert flow_1["termination_reason"] == "activity_timeout"
+        assert flow_1["termination_reason"] == "ACTIVITY_TIMEOUT"
 
     def test_flow_1_packets_count(self, flow_1):
         # SYN, SYN-ACK, ACK, PSH+ACK(15B), ACK, PSH+ACK(25B)
@@ -171,12 +171,12 @@ class TestIdleTimeoutTermination:
         _build_idle_timeout_pcap(pcap)
         result = run_reconstruction(pcap, flow_idle_timeout=3, flow_activity_timeout=5)
         assert len(result) == 2, f"Expected 2 flows (idle + probe), got {len(result)}"
-        idle = next((f for f in result if f["termination_reason"] == "idle_timeout"), None)
+        idle = next((f for f in result if f["termination_reason"] == "IDLE_TIMEOUT"), None)
         assert idle is not None, "No idle_timeout flow found"
         return idle
 
     def test_termination_reason(self, flow):
-        assert flow["termination_reason"] == "idle_timeout"
+        assert flow["termination_reason"] == "IDLE_TIMEOUT"
 
     def test_packets_count(self, flow):
         assert flow["packets_count"] == 5

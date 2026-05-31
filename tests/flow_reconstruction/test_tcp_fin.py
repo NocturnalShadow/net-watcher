@@ -520,3 +520,82 @@ class TestSYNRetransmission:
 
     def test_duration_s(self, flow):
         assert flow["duration_s"] == pytest.approx(2.5)
+
+
+# ---------------------------------------------------------------------------
+# Scenario: Grace period expires mid-capture (append-time enforcement)
+#
+# A flow FINs, accepts its in-grace tail, then a much later packet (> grace
+# after the FIN) must NOT join the closed flow — it terminates the finalizing
+# flow (reason still 'FIN') and starts a fresh flow. Uses the default 3 s grace.
+#
+#   t=0.0  SYN          client→server
+#   t=0.1  SYN-ACK      server→client
+#   t=0.2  FIN+ACK      client→server   ← finalization_time=0.2
+#   t=0.3  ACK          server→client   ← 0.1s after FIN (<3s): joins flow 1
+#   t=5.0  ACK          client→server   ← 4.8s after FIN (>3s): closes flow 1, starts flow 2
+#   t=5.1  ACK          server→client   ← joins flow 2
+#   <PCAP ends>                          flow 2 = UNKNOWN
+# ---------------------------------------------------------------------------
+
+_GRACE_CLIENT = "10.0.9.1"
+_GRACE_SERVER = "10.0.9.2"
+_GRACE_SPORT  = 7777
+_GRACE_DPORT  = 80
+
+
+def _build_grace_expiry_pcap(path):
+    c, s, sp, dp = _GRACE_CLIENT, _GRACE_SERVER, _GRACE_SPORT, _GRACE_DPORT
+    write_pcap([
+        make_tcp_packet(c, s, sp, dp, "S",  seq=100, ack=0,   t=0.0),
+        make_tcp_packet(s, c, dp, sp, "SA", seq=200, ack=101, t=0.1),
+        make_tcp_packet(c, s, sp, dp, "FA", seq=101, ack=201, t=0.2),
+        make_tcp_packet(s, c, dp, sp, "A",  seq=201, ack=102, t=0.3),
+        make_tcp_packet(c, s, sp, dp, "A",  seq=102, ack=201, t=5.0),
+        make_tcp_packet(s, c, dp, sp, "A",  seq=201, ack=103, t=5.1),
+    ], path)
+
+
+class TestGracePeriodExpiry:
+    """A packet arriving > grace after the FIN starts a new flow, not joins the closed one."""
+
+    @pytest.fixture(scope="class")
+    def flows(self, tmp_path_factory):
+        pcap = str(tmp_path_factory.mktemp("pcap") / "grace_expiry.pcap")
+        _build_grace_expiry_pcap(pcap)
+        result = run_reconstruction(pcap)
+        assert len(result) == 2, f"Expected 2 flows, got {len(result)}"
+        return sorted(result, key=lambda f: f["timestamp"])
+
+    @pytest.fixture(scope="class")
+    def flow_1(self, flows):
+        return flows[0]
+
+    @pytest.fixture(scope="class")
+    def flow_2(self, flows):
+        return flows[1]
+
+    def test_flow_1_termination_reason(self, flow_1):
+        # Closed by grace expiry but keeps its FIN reason.
+        assert flow_1["termination_reason"] == "FIN"
+
+    def test_flow_1_packets_count(self, flow_1):
+        # SYN, SYN-ACK, FIN+ACK, in-grace ACK(0.3) — the 5.0s ACK is excluded.
+        assert flow_1["packets_count"] == 4
+
+    def test_flow_1_fin_count(self, flow_1):
+        assert flow_1["fin_count"] == 1
+
+    def test_flow_2_termination_reason(self, flow_2):
+        assert flow_2["termination_reason"] == "UNKNOWN"
+
+    def test_flow_2_packets_count(self, flow_2):
+        assert flow_2["packets_count"] == 2
+
+    def test_total_packets_preserved(self, flows):
+        assert sum(f["packets_count"] for f in flows) == 6
+
+    def test_same_5_tuple(self, flows):
+        for f in flows:
+            assert (f["src_ip"], f["dst_ip"], f["src_port"], f["dst_port"], f["protocol"]) \
+                == (_GRACE_CLIENT, _GRACE_SERVER, _GRACE_SPORT, _GRACE_DPORT, 6)

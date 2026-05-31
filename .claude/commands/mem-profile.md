@@ -1,6 +1,6 @@
 # /mem-profile — Run Memory Profiler & Interpret Results
 
-Run the memory profiler against the `net-watcher-test-only` dataset and produce an interpreted summary. Useful before and after any change that could affect memory or throughput.
+Run the memory profiler against the `icsx-ctu-extended` test dataset and produce an interpreted summary. Useful before and after any change that could affect memory or throughput.
 
 ## Steps
 
