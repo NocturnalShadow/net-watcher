@@ -219,7 +219,7 @@ class TestMaliciousRecall:
     # Weasel: synthetic, unseen-by-training botnet — generalization probe (lower bar).
     # Synthetic botnet traffic per Zhao et al., "Botnet detection based on traffic
     # behavior analysis and flow intervals":
-    # https://www.researchgate.net/publication/259117704_Botnet_detection_based_on_traffic_behavior_analysis_and_flow_intervals
+    # https://ieeexplore.ieee.org/document/6550394
     def test_recall_weasel(self, metrics):
         r = _class_recall(metrics, 'Weasel')
         assert r >= 0.580, f"Weasel recall {r:.4f} < 0.580"

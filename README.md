@@ -35,7 +35,7 @@ git clone https://github.com/NocturnalShadow/net-watcher.git
 cd NetWatcher
 ```
 2. Install the required dependencies `pip install -r requirements.txt`
-3. Ensure that the artifacts/ directory contains the `model.keras` and `scaler.pkl`.
+3. Ensure that the `artifacts/` directory contains the model and scaler (defaults: `icsx-ctu-extended/dnn_16_16_16.keras` and `icsx-ctu-extended/scaler.pkl`).
 4. Run `python src/run.py` (`sudo` may be needed on Linux):
 ```
 python src/run.py --role detector --sniff --output-filter all --output-path events/ --log-path logs/
@@ -140,7 +140,7 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 - `--analysis-batch-size`: Number of flows per classification batch (detector role only) (default: 64).
 - `--flow-activity-timeout`: Flow activity timeout in seconds (default: 1000).
 - `--flow-idle-timeout`: Flow idle timeout in seconds (default: 600).
-- `--flow-max-packets`: Maximum number of packets per non-TCP flow; flow is closed and a new one is created on overflow (default: 100).
+- `--flow-max-packets`: Maximum number of packets per flow; flow is closed and a new one is created on overflow (default: 100).
 - `--flow-queue-max-size`: Maximum number of reconstructed flows queued for processing (default: 10000).
 - `--stats-log-step`: Log traffic processing statistics every N packets (default: 100000).
 - `--log-path`: Path to the application log file. If not specified, logs will be sent to stdout.
@@ -149,7 +149,7 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 
 ## Detection Event Logs
 
-Detection events will be logge if NetWatcher is run in the role of detector (`--role detector`). Event log files will be create and rotate in the directory specified by `--output-path` parametrs. Log file `detector_events.log` is automatically rotated upon reaching 5 MB size (up to 10 rotated log files are preserved). 
+Detection events are logged when NetWatcher runs in the detector role (`--role detector`). Event log files are created and rotated in the directory specified by the `--output-path` parameter. The `detector_events.log` file is automatically rotated upon reaching 5 MB (up to 10 rotated log files are preserved).
 Event log have the following format:
 
 ```
@@ -164,17 +164,48 @@ Event log have the following format:
 
 ## AI Training and Evaluation
 
-- The model was trained using the [ISCX-Botnet-2014](https://www.unb.ca/cic/datasets/botnet.html) dataset.
-- The script used for splitting dataset into different classes availible at [playbooks/process_data.ipynb](https://github.com/NocturnalShadow/net-watcher/blob/main/playbooks/process_data.ipynb)
-- The training and evaluation process of the detection model is captured in [playbooks/ai_training.ipynb](https://github.com/NocturnalShadow/net-watcher/blob/main/playbooks/ai_training.ipynb). The resulting models and other resources can be found under `artifacts`.
+The detection model is trained on a curated combination of three public datasets —
+[CTU-13](https://www.stratosphereips.org/datasets-ctu13),
+[ISCX-Botnet-2014](https://www.unb.ca/cic/datasets/botnet.html), and CTU (selected captures
+from [malware](https://www.stratosphereips.org/datasets-malware) and
+[normal](https://www.stratosphereips.org/datasets-normal)). Train and test splits are kept
+disjoint; note that ISCX-Botnet-2014 re-packages some CTU-13 captures under different names,
+so such duplicates are excluded from one side.
+
+Source captures used (per dataset / split):
+
+| Dataset | Train | Test |
+|---------|-------|------|
+| **CTU‑13** | — | DonBot `47` · Murlo `49` · Neris `43`,`50` · RBot `45-rbot-dos` · Virut `54` |
+| **ISCX‑Botnet‑2014** | benign `benign.pcap` · IRC · Neris · RBot · Virut | benign `benign.pcap` · Zeus · Weasel (synthetic, unseen-type probe) |
+| **CTU** (parts) | benign `12-normal-p2p`,`22-normal` · Emotet `264_2`,`268_1` · Kazy `116_2` · TrickBot `238_1`,`243_1` (~½ of flows) · WannaCry `252_1`,`253_1`,`254_1`,`256_1`,`258_1`,`270_1`,`283_1`,`284_1` · Zeus `78_2` (~⅓ of flows) | benign `7-normal-p2p`,`20`–`26-normal` · Emotet `114_2`,`271_1`,`272_1`,`276_2`,`279_1` · Kazy `116_3`,`116_4` · TrickBot `247_1`,`324_1`,`325_1`,`327_1` · WannaCry `285_1`,`286_1`,`287_1`,`295_1`,`296_1`,`297_1` · Zeus `25_6` |
+
+> For access to the curated dataset, contact the repository owner.
+
+Workflow:
+1. ISCX-Botnet-2014 packets are labeled and split per malware class in [playbooks/process_data.ipynb](https://github.com/NocturnalShadow/net-watcher/blob/main/playbooks/process_data.ipynb).
+2. The labeled ISCX captures and the selected CTU / CTU-13 captures are combined into a single dataset with the train/test split enumerated in the table above.
+3. The model is trained and evaluated in [playbooks/training_icsx_ctu_extended_dnn.ipynb](https://github.com/NocturnalShadow/net-watcher/blob/main/playbooks/training_icsx_ctu_extended_dnn.ipynb); resulting artifacts are saved under `artifacts/icsx-ctu-extended/`.
 
 ### Model Evaluation Results
 
-- **Training AUROC**: 0.9993
-- **Training Accuracy**: 0.9876
-- **Training Precision**: 0.9690
-- **Training Recall**: 0.9952
-- **False Positives**: 0.0108 (but for unseen benign data could be much higher...)
+Model `dnn_16_16_16` at decision threshold **0.66**, measured on the held-out test split (traffic unseen during training):
+
+- **Overall recall**: 83.5%
+- **False positive rate**: 0.30% (252 / 82,967 benign flows)
+
+Per-class recall:
+
+| Class | Recall | Class | Recall |
+|-------|--------|-------|--------|
+| TrickBot | 0.999 | Neris | 0.669 |
+| Emotet | 0.981 | WannaCry | 0.623 |
+| Virut | 0.957 | Weasel* | 0.589 |
+| RBot | 0.948 | Kazy | 0.532 |
+| DonBot | 0.917 | Murlo | 0.309 |
+| | | Zeus | 0.044 |
+
+\* Weasel is a synthetic botnet not represented in training — included as an unseen-type generalization check (see [Zhao et al., *Botnet detection based on traffic behavior analysis and flow intervals*](https://ieeexplore.ieee.org/document/6550394)).
 
 ## Flow Attributes
 
@@ -188,7 +219,7 @@ Event log have the following format:
 | `src_port`              | Source port number                                                           |
 | `dst_port`              | Destination port number                                                      |
 | `protocol`              | Transport layer protocol used (e.g., TCP, UDP)                               |
-| `termination_reason`    | Reason for flow termination (FIN, RST, idle_timeout, activity_timeout)       |
+| `termination_reason`    | Reason for flow termination (FIN, RST, ACTIVITY_TIMEOUT, IDLE_TIMEOUT, MAX_PACKETS, UNKNOWN) |
 
 ### Features
 | Attribute Name          | Description                                                                  | Directional |
