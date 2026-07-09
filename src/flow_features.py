@@ -6,59 +6,48 @@ from logging_utils import log
 
 import numpy as np
 import os
+import pyarrow as pa
 
-# Define the type conversion functions
-def to_list_int64(column): 
-    return column.apply(lambda x: [int(i) for i in x] if x is not None and len(x) > 0 else [0])
-
-def to_list_float64(column):
-    return column.apply(lambda x: [float(i) for i in x] if x is not None and len(x) > 0 else [0.0])
-
-def to_float64(column): 
-    return column.astype('float64')
-
-def to_int64(column):
-    return column.astype('int64')
-
-# Define the feature types mapping
+# Feature columns, with the pyarrow type each is cast to at serialization time
+# (see to_arrow_table). The "n" values are legacy positional ids.
 flow_features_undirectional = [
-    {"name": "duration_s", "n": 1, "type": to_float64},
-    {"name": "packets_count", "n": 2, "type": to_int64},
-    {"name": "payload_bytes_seq", "n": 3, "type": to_list_int64},
-    {"name": "payload_bytes_total", "n": 4, "type": to_int64},
-    {"name": "payload_bytes_min", "n": 5, "type": to_int64},
-    {"name": "payload_bytes_max", "n": 6, "type": to_int64},
-    {"name": "payload_bytes_std", "n": 7, "type": to_float64},
-    {"name": "payload_bytes_min_nonzero", "n": 8, "type": to_int64},
-    {"name": "payload_bytes_avg_nonzero", "n": 9, "type": to_float64},
-    {"name": "payload_bytes_std_nonzero", "n": 10, "type": to_float64},
-    {"name": "interarrival_time_s_seq", "n": 11, "type": to_list_float64},
-    {"name": "interarrival_time_s_min", "n": 12, "type": to_float64},
-    {"name": "interarrival_time_s_max", "n": 13, "type": to_float64},
-    {"name": "interarrival_time_s_std", "n": 14, "type": to_float64},
-    {"name": "syn_count", "n": 15, "type": to_int64},
-    {"name": "fin_count", "n": 16, "type": to_int64},
-    {"name": "rst_count", "n": 17, "type": to_int64},
-    {"name": "ack_count", "n": 18, "type": to_int64},
-    {"name": "psh_count", "n": 19, "type": to_int64},
-    {"name": "urg_count", "n": 20, "type": to_int64},
-    {"name": "ece_count", "n": 21, "type": to_int64},
-    {"name": "cwr_count", "n": 22, "type": to_int64},
+    {"name": "duration_s", "n": 1, "type": pa.float64()},
+    {"name": "packets_count", "n": 2, "type": pa.int64()},
+    {"name": "payload_bytes_seq", "n": 3, "type": pa.list_(pa.int64())},
+    {"name": "payload_bytes_total", "n": 4, "type": pa.int64()},
+    {"name": "payload_bytes_min", "n": 5, "type": pa.int64()},
+    {"name": "payload_bytes_max", "n": 6, "type": pa.int64()},
+    {"name": "payload_bytes_std", "n": 7, "type": pa.float64()},
+    {"name": "payload_bytes_min_nonzero", "n": 8, "type": pa.int64()},
+    {"name": "payload_bytes_avg_nonzero", "n": 9, "type": pa.float64()},
+    {"name": "payload_bytes_std_nonzero", "n": 10, "type": pa.float64()},
+    {"name": "interarrival_time_s_seq", "n": 11, "type": pa.list_(pa.float64())},
+    {"name": "interarrival_time_s_min", "n": 12, "type": pa.float64()},
+    {"name": "interarrival_time_s_max", "n": 13, "type": pa.float64()},
+    {"name": "interarrival_time_s_std", "n": 14, "type": pa.float64()},
+    {"name": "syn_count", "n": 15, "type": pa.int64()},
+    {"name": "fin_count", "n": 16, "type": pa.int64()},
+    {"name": "rst_count", "n": 17, "type": pa.int64()},
+    {"name": "ack_count", "n": 18, "type": pa.int64()},
+    {"name": "psh_count", "n": 19, "type": pa.int64()},
+    {"name": "urg_count", "n": 20, "type": pa.int64()},
+    {"name": "ece_count", "n": 21, "type": pa.int64()},
+    {"name": "cwr_count", "n": 22, "type": pa.int64()},
 ]
 
 _n_undirectional = len(flow_features_undirectional)
 
 flow_features_directional = [
-    {"name": "window_size_seq", "n": _n_undirectional + 1, "type": to_list_int64},
-    {"name": "window_size_min", "n": _n_undirectional + 3, "type": to_int64},
-    {"name": "window_size_max", "n": _n_undirectional + 5, "type": to_int64},
-    {"name": "window_size_avg", "n": _n_undirectional + 7, "type": to_float64},
-    {"name": "window_size_std", "n": _n_undirectional + 9, "type": to_float64},
-    {"name": "window_scaling_factor", "n": _n_undirectional + 11, "type": to_int64},
-    {"name": "initial_window_size", "n": _n_undirectional + 13, "type": to_int64},
-    {"name": "zero_window_count", "n": _n_undirectional + 15, "type": to_int64},
-    {"name": "zero_window_update_count", "n": _n_undirectional + 17, "type": to_int64},
-    # {"name": "zero_window_probe_count", "n": num_undirectional_features + 19, "type": to_int64},
+    {"name": "window_size_seq", "n": _n_undirectional + 1, "type": pa.list_(pa.int64())},
+    {"name": "window_size_min", "n": _n_undirectional + 3, "type": pa.int64()},
+    {"name": "window_size_max", "n": _n_undirectional + 5, "type": pa.int64()},
+    {"name": "window_size_avg", "n": _n_undirectional + 7, "type": pa.float64()},
+    {"name": "window_size_std", "n": _n_undirectional + 9, "type": pa.float64()},
+    {"name": "window_scaling_factor", "n": _n_undirectional + 11, "type": pa.int64()},
+    {"name": "initial_window_size", "n": _n_undirectional + 13, "type": pa.int64()},
+    {"name": "zero_window_count", "n": _n_undirectional + 15, "type": pa.int64()},
+    {"name": "zero_window_update_count", "n": _n_undirectional + 17, "type": pa.int64()},
+    # {"name": "zero_window_probe_count", "n": num_undirectional_features + 19, "type": pa.int64()},
 ]
 
 def get_numeric_feature():
@@ -88,26 +77,24 @@ def flows_df_to_np(df):
         metas.append(meta)
     return np.array(feature_vectors), metas
 
-# Function to apply the type conversions
-def ensure_type_consistency(df):
-    for feature in flow_features_undirectional:
-        col_name = feature["name"]
-        conversion_func = feature["type"]
-        if col_name in df.columns:
-            df[col_name] = conversion_func(df[col_name])
-        else:
-            log.warning(f"Column '{col_name}' not found in the DataFrame.")
-
-    for prefix in ["bwd_", "fwd_"]:
-        for feature in flow_features_directional:
-            col_name = prefix + feature["name"]
-            conversion_func = feature["type"]
-            if col_name in df.columns:
-                df[col_name] = conversion_func(df[col_name])
-            else:
-                log.warning(f"Column '{col_name}' not found in the DataFrame.")
-                
-    return df
+def to_arrow_table(df):
+    """Convert a flows DataFrame to a pyarrow Table, casting each feature column
+    to its declared type. Explicit casts keep the parquet schema stable across
+    shards — in particular an all-empty list column would otherwise infer
+    list<null> and break reads that merge it with a typed shard."""
+    table = pa.Table.from_pandas(df)
+    for prefix, features in (("", flow_features_undirectional),
+                             ("fwd_", flow_features_directional),
+                             ("bwd_", flow_features_directional)):
+        for feature in features:
+            name = prefix + feature["name"]
+            if name not in table.column_names:
+                log.warning(f"Column '{name}' not found in the DataFrame.")
+                continue
+            i = table.schema.get_field_index(name)
+            table = table.set_column(i, pa.field(name, feature["type"]),
+                                     table.column(i).cast(feature["type"]))
+    return table
 
 def first_packet_time(flow):
     return float(flow["packets"][0].time)
@@ -175,6 +162,8 @@ def calculate_tcp_window_features(flow, packets):
 def calculate_features(flow):
     # NOTE: flow packets must be preprocessed before calling this function
     packets = flow["packets"]
+    # Sort by timestamp so out-of-order packets don't yield negative inter-arrivals.
+    packets.sort(key=lambda packet: packet.time)
     interarrival_time_s_seq = [float(packets[i].time - packets[i-1].time) for i in range(1, len(packets))] if len(packets) > 1 else []
     payload_bytes_seq = [packet.payload_bytes for packet in packets]
     src_ip = flow["src_ip"]
@@ -273,8 +262,6 @@ if __name__ == "__main__":
     dataset_path = os.path.join("flows", "train", "Neris")
     df = pd.read_parquet(dataset_path)
     print(f"Loaded DataFrame with {len(df)} rows.")
-    # Ensure type consistency
-    df = ensure_type_consistency(df)
 
     # Convert DataFrame to array
     vectors, metas = flows_df_to_np(df)

@@ -12,12 +12,11 @@ def get_resource_path(relative_path):
 
 import scapy
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 
 from flow_reconstruction import FlowReconstructor
 from flow_analysis import analyze_flows
-from flow_features import ensure_type_consistency
+from flow_features import to_arrow_table
 from logging_utils import *
 from enums import *
 
@@ -267,9 +266,7 @@ def locate_pcap_files(input_path):
     return src_pcap_files
 
 def save_as_df(buffer, path):
-    df = pd.DataFrame(buffer)
-    df = ensure_type_consistency(df)
-    table = pa.Table.from_pandas(df)
+    table = to_arrow_table(pd.DataFrame(buffer))
     os.makedirs(path, exist_ok=True)
     pq.write_to_dataset(table, root_path=path, partition_cols=None)
 

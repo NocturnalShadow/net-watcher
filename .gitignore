@@ -30,3 +30,7 @@ ideas.txt
 scripts/
 info/
 benchmarks/
+Cybersecurity with AI/
+artifacts/**/*markov*
+artifacts/**/*hmm*
+artifacts/**/*.npz
