@@ -174,19 +174,19 @@ class TestMaliciousRecall:
 
     # Overall
     def test_recall(self, metrics):
-        assert metrics['recall'] >= 0.830, (
-            f"Recall {metrics['recall']:.4f} < 0.830 "
+        assert metrics['recall'] >= 0.840, (
+            f"Recall {metrics['recall']:.4f} < 0.840 "
             f"({metrics['mal_alerts']}/{metrics['mal_total']})"
         )
 
     # Per-class
     def test_recall_donbot(self, metrics):
         r = _class_recall(metrics, 'DonBot')
-        assert r >= 0.910, f"DonBot recall {r:.4f} < 0.910"
+        assert r >= 0.920, f"DonBot recall {r:.4f} < 0.920"
 
     def test_recall_emotet(self, metrics):
         r = _class_recall(metrics, 'Emotet')
-        assert r >= 0.970, f"Emotet recall {r:.4f} < 0.970"
+        assert r >= 0.980, f"Emotet recall {r:.4f} < 0.980"
 
     def test_recall_kazy(self, metrics):
         r = _class_recall(metrics, 'Kazy')
@@ -194,19 +194,19 @@ class TestMaliciousRecall:
 
     def test_recall_murlo(self, metrics):
         r = _class_recall(metrics, 'Murlo')
-        assert r >= 0.300, f"Murlo recall {r:.4f} < 0.300"
+        assert r >= 0.320, f"Murlo recall {r:.4f} < 0.320"
 
     def test_recall_neris(self, metrics):
         r = _class_recall(metrics, 'Neris')
-        assert r >= 0.660, f"Neris recall {r:.4f} < 0.660"
+        assert r >= 0.690, f"Neris recall {r:.4f} < 0.690"
 
     def test_recall_rbot(self, metrics):
         r = _class_recall(metrics, 'RBot')
-        assert r >= 0.940, f"RBot recall {r:.4f} < 0.940"
+        assert r >= 0.950, f"RBot recall {r:.4f} < 0.950"
 
     def test_recall_trickbot(self, metrics):
         r = _class_recall(metrics, 'TrickBot')
-        assert r >= 0.997, f"TrickBot recall {r:.4f} < 0.997"
+        assert r >= 0.998, f"TrickBot recall {r:.4f} < 0.998"
 
     def test_recall_virut(self, metrics):
         r = _class_recall(metrics, 'Virut')
@@ -214,7 +214,7 @@ class TestMaliciousRecall:
 
     def test_recall_wannacry(self, metrics):
         r = _class_recall(metrics, 'WannaCry')
-        assert r >= 0.610, f"WannaCry recall {r:.4f} < 0.610"
+        assert r >= 0.730, f"WannaCry recall {r:.4f} < 0.730"
 
     # Weasel: synthetic, unseen-by-training botnet — generalization probe (lower bar).
     # Synthetic botnet traffic per Zhao et al., "Botnet detection based on traffic
@@ -222,7 +222,7 @@ class TestMaliciousRecall:
     # https://ieeexplore.ieee.org/document/6550394
     def test_recall_weasel(self, metrics):
         r = _class_recall(metrics, 'Weasel')
-        assert r >= 0.580, f"Weasel recall {r:.4f} < 0.580"
+        assert r >= 0.660, f"Weasel recall {r:.4f} < 0.660"
 
     def test_recall_zeus(self, metrics):
         r = _class_recall(metrics, 'Zeus')

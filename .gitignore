@@ -34,3 +34,8 @@ Cybersecurity with AI/
 artifacts/**/*markov*
 artifacts/**/*hmm*
 artifacts/**/*.npz
+.mcp.json
+.ipynb_checkpoints/
+.jupyter/
+.jupyter_ystore.db
+playbooks/experimental/

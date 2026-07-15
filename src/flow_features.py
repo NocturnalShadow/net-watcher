@@ -78,10 +78,7 @@ def flows_df_to_np(df):
     return np.array(feature_vectors), metas
 
 def to_arrow_table(df):
-    """Convert a flows DataFrame to a pyarrow Table, casting each feature column
-    to its declared type. Explicit casts keep the parquet schema stable across
-    shards — in particular an all-empty list column would otherwise infer
-    list<null> and break reads that merge it with a typed shard."""
+    """Convert a flows DataFrame to a pyarrow Table, casting each feature column to a specific type."""
     table = pa.Table.from_pandas(df)
     for prefix, features in (("", flow_features_undirectional),
                              ("fwd_", flow_features_directional),
