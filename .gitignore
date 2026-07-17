@@ -39,3 +39,5 @@ artifacts/**/*.npz
 .jupyter/
 .jupyter_ystore.db
 playbooks/experimental/
+# Demo runtime output (detector event logs)
+demo/out/
