@@ -1,11 +1,10 @@
-# NetWatcher — демо детектора загроз
+# NetWatcher — демо детектора трафіку шкідливих програм
 
 Детектор читає PCAP → реконструює TCP-потоки → класифікує кожен потік навченою
 DNN-моделлю.
 Події пишуться у `demo\out\<pcap>.log`: `[ALERT]` — шкідливий потік, `[OK]` — нормальний.
 
-**Виконувати з кореня репозиторію (`net-watcher\`). Оболонка — cmd. Кожен крок ~5 c.**
-Трейси та їх походження — у [`demo\pcap\`](pcap/README.md); DNS збережено для контексту у Wireshark.
+**Виконувати з кореня репозиторію (`net-watcher\`).
 
 ---
 
@@ -16,9 +15,8 @@ DNN-моделлю.
 ```bat
 venv\Scripts\activate.bat
 pip install -r requirements.txt
+rm -rf demo/out
 ```
-
-> Журнал дописується при повторному запуску — очистити можна командою `rmdir /s /q demo\out`.
 
 ---
 
@@ -31,9 +29,9 @@ python src\run.py --role detector --input-path demo\pcap\emotet.pcap --output-pa
 type demo\out\emotet.pcap.log
 ```
 
-Очікувано: **8 × `[ALERT]`** — `10.0.2.102 → 112.124.3.15:8080`.
+Очікується: **8 × `[ALERT]`** — `10.0.2.102 → 112.124.3.15:8080`.
 
-Співставлення журнал ↔ Wireshark (`demo\pcap\emotet.pcap`):
+**Ролі:** бот (жертва) `10.0.2.102` → C2 `112.124.3.15:8080`.
 
 | Потік у журналі | Wireshark-фільтр | Що це |
 |-----------------|------------------|-------|
@@ -52,9 +50,9 @@ python src\run.py --role detector --input-path demo\pcap\trickbot.pcap --output-
 type demo\out\trickbot.pcap.log
 ```
 
-Очікувано: **7 × `[ALERT]`** — 1 потік розвідки + 6 C2-маячків.
+Очікується: **7 × `[ALERT]`** — 1 потік розвідки + 6 C2-маячків.
 
-Співставлення журнал ↔ Wireshark (`demo\pcap\trickbot.pcap`):
+**Ролі:** бот (жертва) `192.168.1.123` → C2 `82.146.57.127:443`; `107.22.255.106` — легітимний AWS (`checkip`), не C2.
 
 | Потік у журналі | Wireshark-фільтр | Що це |
 |-----------------|------------------|-------|
@@ -74,7 +72,7 @@ python src\run.py --role detector --input-path demo\pcap\benign.pcap --output-pa
 type demo\out\benign.pcap.log
 ```
 
-Очікувано: **30 × `[OK]`, 0 алертів** — звичайні HTTPS/HTTP-сесії (CloudFront, Google, CDN) не турбують аналітика.
+Очікується: **30 × `[OK]`, 0 алертів** — звичайні HTTPS/HTTP-сесії (CloudFront, Google, CDN) не турбують аналітика.
 
 ---
 
@@ -87,4 +85,4 @@ python src\run.py --role detector --input-path demo\pcap\mixed.pcap --output-pat
 type demo\out\mixed.pcap.log
 ```
 
-Очікувано: **15 × `[ALERT]`** (8 Emotet + 7 TrickBot) серед нормального трафіку.
+Очікується: **15 × `[ALERT]`** (8 Emotet + 7 TrickBot) серед нормального трафіку.

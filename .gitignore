@@ -41,3 +41,6 @@ artifacts/**/*.npz
 playbooks/experimental/
 # Demo runtime output (detector event logs)
 demo/out/
+# Keep demo traces tracked (override *.pcap and pcap/ above)
+!demo/pcap/
+!demo/pcap/*.pcap
