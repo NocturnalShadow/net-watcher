@@ -144,8 +144,9 @@ python src/run.py --role detector --input-path pcap/train/malicious/ --output-pa
 - `--flow-queue-max-size`: Maximum number of reconstructed flows queued for processing (default: 10000).
 - `--stats-log-step`: Log traffic processing statistics every N packets (default: 100000).
 - `--log-path`: Path to the application log file. If not specified, logs will be sent to stdout.
-- `--model-path`: Path to the Keras model file (default: `artifacts/icsx-ctu-extended/dnn_16_16_16.keras`).
+- `--model-path`: Path to the classification model file. The format is resolved from the extension: `.keras` implies a TensorFlow DNN, `.pkl` implies a pickled scikit-learn model. Two trained models are available: `artifacts/icsx-ctu-extended/dnn_16_16_16.keras` (DNN, default) and `artifacts/icsx-ctu-extended/pca_12_rf_9.pkl` (PCA + Random Forest pipeline).
 - `--scaler-path`: Path to the scaler pickle file (default: `artifacts/icsx-ctu-extended/scaler.pkl`).
+- `--threshold`: Detection threshold for classifying a flow as malicious (detector role only). If not specified, the model's calibrated operating point at FPR ≤ 0.3% is used: 0.59 for the DNN (`.keras`), 0.52 for the Random Forest (`.pkl`).
 
 ## Detection Event Logs
 

@@ -71,8 +71,9 @@ def main():
     parser.add_argument('--analysis-batch-size', type=int, default=64, help='Number of flows per classification batch (default: 64)')
     parser.add_argument('--stats-log-step', type=int, default=100_000, help='Log traffic processing statistics every N packets')
     parser.add_argument('--log-path', type=str, help='Path to the application log file. If not specified, logs will be sent to stdout.')
-    parser.add_argument('--model-path', type=str, default='artifacts/icsx-ctu-extended/dnn_16_16_16.keras', help='Path to the Keras model file (default: artifacts/icsx-ctu-extended/dnn_16_16_16.keras)')
+    parser.add_argument('--model-path', type=str, default='artifacts/icsx-ctu-extended/dnn_16_16_16.keras', help='Path to the classification model file; the format is resolved from the extension: .keras = TensorFlow DNN, .pkl = pickled scikit-learn model. Available models: artifacts/icsx-ctu-extended/dnn_16_16_16.keras (DNN, default) and artifacts/icsx-ctu-extended/pca_12_rf_9.pkl (PCA + Random Forest)')
     parser.add_argument('--scaler-path', type=str, default='artifacts/icsx-ctu-extended/scaler.pkl', help='Path to the scaler pickle file (default: artifacts/icsx-ctu-extended/scaler.pkl)')
+    parser.add_argument('--threshold', type=float, help='Detection threshold for classifying a flow as malicious (--role detector only). If not specified, uses the model\'s calibrated operating point at FPR <= 0.3%%: 0.59 for the DNN (.keras), 0.52 for the Random Forest (.pkl)')
 
     args = parser.parse_args()
     args.model_path  = get_resource_path(args.model_path)
@@ -105,6 +106,8 @@ def main():
 
     # Validate model and scaler paths for detector role
     if args.role == 'detector':
+        if not args.model_path.endswith(('.keras', '.pkl')):
+            parser.error(f"Unsupported model format: {args.model_path} (expected .keras or .pkl)")
         if not os.path.isfile(args.model_path):
             parser.error(f"Model file not found: {args.model_path}")
         if not os.path.isfile(args.scaler_path):
@@ -162,7 +165,7 @@ def detection_online(**kwargs):
     flow_analyzer_thread = threading.Thread(
         target=analyze_flows,
         args=(network_flows, event_log_file, output_filter),
-        kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path')},
+        kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path'), 'threshold': kwargs.get('threshold')},
         daemon=True)
     flow_analyzer_thread.start()
 
@@ -191,7 +194,7 @@ def detection_offline(**kwargs):
         flow_analyzer_thread = threading.Thread(
             target=analyze_flows,
             args=(network_flows, event_log_file, output_filter),
-            kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path'), 'batch_size': kwargs.get('analysis_batch_size')},
+            kwargs={'model_path': kwargs.get('model_path'), 'scaler_path': kwargs.get('scaler_path'), 'batch_size': kwargs.get('analysis_batch_size'), 'threshold': kwargs.get('threshold')},
             daemon=True)
         flow_analyzer_thread.start()
 
