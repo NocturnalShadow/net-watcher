@@ -8,8 +8,7 @@ NetWatcher is a network monitoring tool that reconstructs network flows from pac
 
 ## How to run
 ### Run from executable (Linux)
-1. Download latest released `netwatcher` binary. Run `chmod 755 netwatcher` if necessary. 
-    - [netwatcher-v0.1.1-linux-x86.tar.gz (S3 bucket, 703Mb)](https://github-releases-f9ebd6ea-5a01-475b-a887-16eebedde4a1.s3.eu-central-1.amazonaws.com/net-watcher/netwatcher-v0.1.1-linux-x86.tar.gz)
+1. Package executable (see "How to package source as an executable").
 2. Give the binary the permissions to capture traffic (required only for `--sniff` mode):
 ```
 sudo setcap cap_net_raw+ep netwatcher
@@ -21,8 +20,7 @@ sudo setcap cap_net_raw+ep netwatcher
 netwatcher --role detector --sniff --output-filter all --output-path events/ --log-path logs/
 ```
 ### Run from executable (Windows)
-1. Download latest released `netwatcher.exe` binary.
-    - [netwatcher-v0.1.1-windows-x86.zip (S3 bucket, 487Mb)](https://github-releases-f9ebd6ea-5a01-475b-a887-16eebedde4a1.s3.eu-central-1.amazonaws.com/net-watcher/netwatcher-v0.1.1-windows-x86.zip)
+1. Package executable (see "How to package source as an executable").
 2. Run `netwatcher` executable:
 ```
 netwatcher --role detector --sniff --output-filter all --output-path events/ --log-path logs/
