@@ -86,3 +86,20 @@ type demo\out\mixed.pcap.log
 ```
 
 Очікується: **15 × `[ALERT]`** (8 Emotet + 7 TrickBot) серед нормального трафіку.
+
+---
+
+## 5. Живий трафік (онлайн-захоплення)
+
+<!-- Детектор слухає мережу наживо (--sniff), а ми в браузері відкриваємо кілька сторінок
+     і бачимо, як події з'являються у файлі майже в реальному часі.
+     Малі max-packets / timeouts / batch => потоки швидко закриваються й класифікуються.
+     Потрібно 2 вікна. Захоплення може вимагати прав адміністратора (Npcap). -->
+
+```bat
+python src\run.py --role detector --sniff --output-path demo\out --output-filter all --flow-max-packets 40 --analysis-batch-size 4 --flow-idle-timeout 15 --flow-activity-timeout 30
+```
+
+> Якщо під час серфінгу подій нема — детектор слухає не той інтерфейс. Перелік:
+> `python -c "from scapy.all import get_working_ifaces; [print(i.name) for i in get_working_ifaces()]"`
+> і перезапустити з: `--net-interface "<ім'я, напр. Wi-Fi>"`.
